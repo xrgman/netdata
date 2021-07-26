@@ -7,7 +7,9 @@
 
 #include "../../aclk/schema-wrappers/chart_stream.h"
 
+#ifndef ACLK_MAX_CHART_BATCH
 #define ACLK_MAX_CHART_BATCH    (20)
+#endif
 #define ACLK_MAX_CHART_BATCH_COUNT (5)
 #define ACLK_MAX_ALERT_UPDATES  (5)
 #define ACLK_SYNC_RETRY_COUNT   "10"
