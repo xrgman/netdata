@@ -861,12 +861,6 @@ void sql_chart_deduplicate(struct aclk_database_worker_config *wc, struct aclk_d
     db_execute(buffer_tostring(sql));
 
     buffer_reset(sql);
-    buffer_sprintf(sql, "INSERT INTO aclk_chart_%s (date_created, date_updated, date_submitted, status, "
-                "uuid, type, unique_id, update_count) "
-                "SELECT * FROM ts_%s ORDER BY DATE_CREATED ASC;", wc->uuid_str, wc->uuid_str);
-    db_execute(buffer_tostring(sql));
-
-    buffer_reset(sql);
     buffer_sprintf(sql, "INSERT OR REPLACE INTO aclk_chart_latest_%s (uuid, unique_id, date_submitted) "
                         "SELECT uuid, unique_id, date_submitted FROM aclk_chart_%s where sequence_id IN "
                         "(SELECT sequence_id FROM aclk_chart_%s WHERE date_submitted IS NOT NULL "
