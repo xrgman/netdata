@@ -410,6 +410,7 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
     int create_tables = 0;
     int stop_thread = 0;
     int update_info = 0;
+    int rotate = 0;
     uint64_t chart_seq_ack = 0;
 
     while(url) {
@@ -435,6 +436,7 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
         if(!strcmp(name, "create_tables")) create_tables = atoi(value);
         if(!strcmp(name, "chart_seq_ack")) chart_seq_ack = atoi(value);
         if(!strcmp(name, "update_info")) update_info = atoi(value);
+        if(!strcmp(name, "rotate")) rotate = atoi(value);
 
 
         //else {
@@ -570,6 +572,33 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
                 break;
         }
         destroy_aclk_completion(&compl);
+        rrd_unlock();
+        buffer_no_cacheable(w->response.data);
+        return HTTP_RESP_OK;
+    }
+
+    if (rotate) {
+        struct aclk_database_cmd cmd;
+        cmd.opcode = ACLK_DATABASE_UPD_STATS;
+        cmd.data = NULL;
+        cmd.count = 0;
+        cmd.completion = NULL;
+
+        rrd_wrlock();
+        RRDHOST *this_host = localhost;
+
+        buffer_sprintf(w->response.data, "Generating rotation update message\n");
+        while (this_host) {
+            if (rotate != 2 && this_host != host) {
+                this_host = this_host->next;
+                continue;
+            }
+            buffer_sprintf(w->response.data, " Sent for host %s\n", this_host->hostname);
+            aclk_database_enq_cmd((struct aclk_database_worker_config *)this_host->dbsync_worker, &cmd);
+            this_host = this_host->next;
+            if (rotate == 1)
+                break;
+        }
         rrd_unlock();
         buffer_no_cacheable(w->response.data);
         return HTTP_RESP_OK;
