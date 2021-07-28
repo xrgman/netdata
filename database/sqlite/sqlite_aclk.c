@@ -132,6 +132,22 @@ struct aclk_database_cmd aclk_database_deq_cmd(struct aclk_database_worker_confi
     return ret;
 }
 
+int aclk_start_sync_thread(void *data, int argc, char **argv, char **column)
+{
+    char uuid_str[GUID_LEN + 1];
+    UNUSED(data);
+    UNUSED(argc);
+    UNUSED(column);
+
+    uuid_unparse_lower(*((uuid_t *) argv[0]), uuid_str);
+
+    if (rrdhost_find_by_guid(uuid_str, 0) == localhost)
+        return 0;
+
+    info("DEBUG: Start thread for %s", uuid_str);
+    sql_create_aclk_table(NULL, (uuid_t *) argv[0], (uuid_t *) argv[1]);
+    return 0;
+}
 
 void sql_aclk_sync_init(void)
 {
@@ -160,6 +176,10 @@ void sql_aclk_sync_init(void)
     }
     info("SQLite aclk sync initialization completed");
     fatal_assert(0 == uv_mutex_init(&aclk_async_lock));
+
+    rc = sqlite3_exec(db_meta, "SELECT ni.host_id, ni.node_id FROM host h, node_instance ni WHERE "
+        "h.host_id = ni.host_id AND ni.node_id IS NOT NULL;", aclk_start_sync_thread, NULL, NULL);
+
     return;
 }
 
@@ -188,10 +208,10 @@ static void timer_cb(uv_timer_t* handle)
 //        cmd.completion = NULL;
 //        aclk_database_enq_cmd(wc, &cmd);
 
+        wc->cleanup_after = 0;
         cmd.opcode = ACLK_DATABASE_UPD_STATS;
         cmd.completion = NULL;
         aclk_database_enq_cmd(wc, &cmd);
-        wc->cleanup_after = 0;
     }
 
 //    {
