@@ -234,4 +234,5 @@ extern void aclk_set_architecture(int mode);
 //void sql_check_rotation_state(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 //int aclk_add_offline_dimension_event(struct aclk_database_worker_config *wc, char *node_id, char *chart_name, uuid_t *dim_uuid, char *rd_id, char *rd_name, time_t first_entry_t, time_t last_entry_t);
 void sql_aclk_sync_init(void);
+void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 #endif //NETDATA_SQLITE_ACLK_H

@@ -56,6 +56,20 @@ void aclk_del_worker_thread(struct aclk_database_worker_config *wc)
     return;
 }
 
+int aclk_worker_thread_exists(char *guid)
+{
+    int rc = 0;
+    struct aclk_database_worker_config *tmp = aclk_thread_head;
+
+    uv_mutex_lock(&aclk_async_lock);
+    while (tmp && !rc) {
+        rc = strcmp(tmp->uuid_str, guid) == 0;
+        tmp = tmp->next;
+    }
+    uv_mutex_unlock(&aclk_async_lock);
+    return rc;
+}
+
 void aclk_database_init_cmd_queue(struct aclk_database_worker_config *wc)
 {
     wc->cmd_queue.head = wc->cmd_queue.tail = 0;
@@ -303,10 +317,11 @@ void aclk_database_worker(void *arg)
             switch (opcode) {
                 case ACLK_DATABASE_NOOP:
                     /* the command queue was empty, do nothing */
+                    sql_maint_aclk_sync_database(wc, cmd);
                     break;
                 case ACLK_DATABASE_CLEANUP:
                     debug(D_ACLK_SYNC, "Database cleanup for %s", wc->uuid_str);
-                    //sql_maint_database();
+                    sql_maint_aclk_sync_database(wc, cmd);
                     break;
                 case ACLK_DATABASE_CHECK:
                     debug(D_ACLK_SYNC, "Checking database dimensions for %s", wc->uuid_str);
@@ -587,6 +602,12 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     uuid_unparse_lower(*host_uuid, host_guid);
     uuid_unparse_lower_fix(host_uuid, uuid_str);
 
+    /// check if we have it in the pool
+    if (aclk_worker_thread_exists(uuid_str)) {
+        //info("DEBUG: %s exists in the pool, not creating", uuid_str);
+        return;
+    }
+
     BUFFER *sql = buffer_create(1024);
 
     buffer_sprintf(sql, TABLE_ACLK_CHART, uuid_str);
@@ -626,7 +647,7 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     if (likely(host))
         host->dbsync_worker = (void *) wc;
     wc->host = host;
-    wc->cleanup_after = now_realtime_sec() + 60;
+    wc->cleanup_after = now_realtime_sec() + 600;
     wc->startup_time = now_realtime_sec();
     strcpy(wc->uuid_str, uuid_str);
     strcpy(wc->host_guid, host_guid);
@@ -635,3 +656,51 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     fatal_assert(0 == uv_thread_create(&(wc->thread), aclk_database_worker, wc));
 }
 
+void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
+{
+    UNUSED(cmd);
+    static time_t  last_database_check = 0;
+
+    time_t  now = now_realtime_sec();
+
+    if (now - last_database_check < 120)
+        return;
+
+    last_database_check = now;
+
+    info("DEBUG: Checking database for %s", wc->uuid_str);
+
+    return;
+
+//
+//    BUFFER *sql = buffer_create(1024);
+//
+//    buffer_sprintf(sql,"SELECT ac.sequence_id, ac.date_created FROM aclk_chart_%s ac " \
+//                        "WHERE ac.date_submitted IS NOT NULL ORDER BY ac.sequence_id DESC LIMIT 1;", wc->uuid_str);
+//
+//    int rc;
+//    sqlite3_stmt *res = NULL;
+//    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
+//    if (rc != SQLITE_OK) {
+//        error_report("Failed to prepare statement to find last chart sequence id");
+//        goto fail;
+//    }
+//
+//    wc->chart_sequence_id = 0;
+//    wc->chart_timestamp = 0;
+//    while (sqlite3_step(res) == SQLITE_ROW) {
+//        wc->chart_sequence_id = (uint64_t) sqlite3_column_int64(res, 0);
+//        wc->chart_timestamp  = (time_t) sqlite3_column_int64(res, 1);
+//    }
+//
+//    debug(D_ACLK_SYNC,"Chart %s reports last seq=%"PRIu64" t=%ld", wc->uuid_str,
+//          wc->chart_sequence_id, wc->chart_timestamp);
+//
+//    rc = sqlite3_finalize(res);
+//    if (unlikely(rc != SQLITE_OK))
+//        error_report("Failed to reset statement when fetching chart sequence info, rc = %d", rc);
+//
+//    fail:
+//    buffer_free(sql);
+//    return;
+}
