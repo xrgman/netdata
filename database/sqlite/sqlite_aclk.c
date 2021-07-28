@@ -647,7 +647,7 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     if (likely(host))
         host->dbsync_worker = (void *) wc;
     wc->host = host;
-    wc->cleanup_after = now_realtime_sec() + 60;
+    wc->cleanup_after = now_realtime_sec() + 600;
     wc->startup_time = now_realtime_sec();
     strcpy(wc->uuid_str, uuid_str);
     strcpy(wc->host_guid, host_guid);
