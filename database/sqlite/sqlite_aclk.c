@@ -188,9 +188,9 @@ static void timer_cb(uv_timer_t* handle)
 //        cmd.completion = NULL;
 //        aclk_database_enq_cmd(wc, &cmd);
 
-//        cmd.opcode = ACLK_DATABASE_UPD_STATS;
-//        cmd.completion = NULL;
-//        aclk_database_enq_cmd(wc, &cmd);
+        cmd.opcode = ACLK_DATABASE_UPD_STATS;
+        cmd.completion = NULL;
+        aclk_database_enq_cmd(wc, &cmd);
         wc->cleanup_after = 0;
     }
 
@@ -365,9 +365,9 @@ void aclk_database_worker(void *arg)
                                     cmd.completion = NULL;
                                     aclk_database_enq_cmd(wc, &cmd);
                                 }
-                                cmd.opcode = ACLK_DATABASE_UPD_STATS;
-                                cmd.completion = NULL;
-                                aclk_database_enq_cmd(wc, &cmd);
+                                //cmd.opcode = ACLK_DATABASE_UPD_STATS;
+                                //cmd.completion = NULL;
+                                //aclk_database_enq_cmd(wc, &cmd);
                             }
                             freez(agent_id);
                         }
@@ -471,8 +471,6 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
     UNUSED(cmd);
 #ifdef ENABLE_DBENGINE
     int rc;
-
-    return;
 
     char *claim_id = is_agent_claimed();
     if (unlikely(!claim_id))
