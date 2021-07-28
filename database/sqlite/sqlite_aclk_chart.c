@@ -979,4 +979,3 @@ void aclk_start_streaming(char *node_id, uint64_t sequence_id, time_t created_at
 
     return;
 }
-
