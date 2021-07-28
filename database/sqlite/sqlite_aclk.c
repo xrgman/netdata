@@ -204,7 +204,7 @@ static void async_cb(uv_async_t *handle)
     debug(D_ACLK_SYNC, "%s called, active=%d.", __func__, uv_is_active((uv_handle_t *)handle));
 }
 
-#define TIMER_PERIOD_MS (2000)
+#define TIMER_PERIOD_MS (1000)
 
 static void timer_cb(uv_timer_t* handle)
 {

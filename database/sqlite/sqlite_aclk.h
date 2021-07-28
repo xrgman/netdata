@@ -10,7 +10,9 @@
 #ifndef ACLK_MAX_CHART_BATCH
 #define ACLK_MAX_CHART_BATCH    (20)
 #endif
+#ifndef ACLK_MAX_CHART_BATCH_COUNT
 #define ACLK_MAX_CHART_BATCH_COUNT (5)
+#endif
 #define ACLK_MAX_ALERT_UPDATES  (5)
 #define ACLK_SYNC_RETRY_COUNT   "10"
 
