@@ -187,6 +187,7 @@ static void timer_cb(uv_timer_t* handle)
 //        cmd.opcode = ACLK_DATABASE_CHECK;
 //        cmd.completion = NULL;
 //        aclk_database_enq_cmd(wc, &cmd);
+
         cmd.opcode = ACLK_DATABASE_UPD_STATS;
         cmd.completion = NULL;
         aclk_database_enq_cmd(wc, &cmd);
@@ -364,9 +365,9 @@ void aclk_database_worker(void *arg)
                                     cmd.completion = NULL;
                                     aclk_database_enq_cmd(wc, &cmd);
                                 }
-                                cmd.opcode = ACLK_DATABASE_UPD_STATS;
-                                cmd.completion = NULL;
-                                aclk_database_enq_cmd(wc, &cmd);
+                                //cmd.opcode = ACLK_DATABASE_UPD_STATS;
+                                //cmd.completion = NULL;
+                                //aclk_database_enq_cmd(wc, &cmd);
                             }
                             freez(agent_id);
                         }
@@ -463,7 +464,7 @@ void aclk_set_architecture(int mode)
 //};
 
 #define SELECT_HOST_DIMENSION_LIST  "SELECT d.dim_id, c.update_every FROM chart c, dimension d, host h " \
-        "where d.chart_id = c.chart_id and c.host_id = h.host_id and c.host_id = @host_id order by c.update_every;"
+        "WHERE d.chart_id = c.chart_id AND c.host_id = h.host_id AND c.host_id = @host_id ORDER BY c.update_every ASC;"
 
 void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
 {
@@ -500,7 +501,7 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
     time_t  start_time = LONG_MAX;
     time_t  first_entry_t;
     time_t  last_entry_t;
-    int update_every = 0;
+    uint32_t update_every = 0;
 
     struct retention_updated rotate_data;
 
@@ -517,28 +518,28 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
     rotate_data.node_id = strdupz(wc->node_id);
 
     while (sqlite3_step(res) == SQLITE_ROW) {
-        if (!update_every || update_every != sqlite3_column_int(res, 1)) {
+        if (!update_every || update_every != (uint32_t) sqlite3_column_int(res, 1)) {
             if (update_every) {
-                debug(D_ACLK_SYNC,"Update %s for %d oldest time = %ld", wc->host_guid, update_every, start_time);
-                rotate_data.interval_durations[rotate_data.interval_duration_count].update_every = update_every;
+                debug(D_ACLK_SYNC,"Update %s for %u oldest time = %ld", wc->host_guid, update_every, start_time);
                 rotate_data.interval_durations[rotate_data.interval_duration_count].retention = rotate_data.rotation_timestamp.tv_sec - start_time;
                 rotate_data.interval_duration_count++;
             }
-            update_every = sqlite3_column_int(res, 1);
+            update_every = (uint32_t) sqlite3_column_int(res, 1);
+            rotate_data.interval_durations[rotate_data.interval_duration_count].update_every = update_every;
             start_time = LONG_MAX;
         }
-        rrdeng_metric_latest_time_by_uuid((uuid_t *)sqlite3_column_blob(res, 0), &first_entry_t, &last_entry_t);
-        start_time = MIN(start_time, first_entry_t);
+        rc = rrdeng_metric_latest_time_by_uuid((uuid_t *)sqlite3_column_blob(res, 0), &first_entry_t, &last_entry_t);
+        if (likely(!rc && first_entry_t))
+            start_time = MIN(start_time, first_entry_t);
     }
     if (update_every) {
-        debug(D_ACLK_SYNC, "Update %s for %d oldest time = %ld", wc->host_guid, update_every, start_time);
-        rotate_data.interval_durations[rotate_data.interval_duration_count].update_every = update_every;
+        debug(D_ACLK_SYNC, "Update %s for %u oldest time = %ld", wc->host_guid, update_every, start_time);
         rotate_data.interval_durations[rotate_data.interval_duration_count].retention = rotate_data.rotation_timestamp.tv_sec - start_time;
         rotate_data.interval_duration_count++;
     }
 
     info("DEBUG: Scan update every for host");
-    for (int i=0; i < rotate_data.interval_duration_count; ++i) {
+    for (int i = 0; i < rotate_data.interval_duration_count; ++i) {
         info("DEBUG:  %d --> Update %s for %u  Retention = %u", i, wc->host_guid,
              rotate_data.interval_durations[i].update_every, rotate_data.interval_durations[i].retention);
     };

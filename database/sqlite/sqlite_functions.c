@@ -233,7 +233,8 @@ int sql_init_database(void)
 
 //    sql_create_aclk_table(host, &host->host_uuid);
     sql_aclk_sync_init();
-    rc = sqlite3_exec(db_meta, "select host_id, node_id from host;", aclk_start_sync_thread, NULL, NULL);
+    rc = sqlite3_exec(db_meta, "SELECT ni.host_id, ni.node_id FROM host h, node_instance ni WHERE "
+        "h.host_id = ni.host_id AND ni.node_id IS NOT NULL;", aclk_start_sync_thread, NULL, NULL);
 
     return 0;
 }
