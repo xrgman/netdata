@@ -96,6 +96,28 @@ void aclk_database_enq_cmd_nowake(struct aclk_database_worker_config *wc, struct
     uv_mutex_unlock(&wc->cmd_mutex);
 }
 
+int aclk_database_enq_cmd_nowait(struct aclk_database_worker_config *wc, struct aclk_database_cmd *cmd)
+{
+    unsigned queue_size;
+
+    /* wait for free space in queue */
+    uv_mutex_lock(&wc->cmd_mutex);
+    if ((queue_size = wc->queue_size) == ACLK_DATABASE_CMD_Q_MAX_SIZE)
+        return 1;
+
+    fatal_assert(queue_size < ACLK_DATABASE_CMD_Q_MAX_SIZE);
+    /* enqueue command */
+    wc->cmd_queue.cmd_array[wc->cmd_queue.tail] = *cmd;
+    wc->cmd_queue.tail = wc->cmd_queue.tail != ACLK_DATABASE_CMD_Q_MAX_SIZE - 1 ?
+                         wc->cmd_queue.tail + 1 : 0;
+    wc->queue_size = queue_size + 1;
+    uv_mutex_unlock(&wc->cmd_mutex);
+
+    /* wake up event loop */
+    fatal_assert(0 == uv_async_send(&wc->async));
+    return 0;
+}
+
 void aclk_database_enq_cmd(struct aclk_database_worker_config *wc, struct aclk_database_cmd *cmd)
 {
     unsigned queue_size;
@@ -215,7 +237,7 @@ static void timer_cb(uv_timer_t* handle)
     struct aclk_database_cmd cmd;
     cmd.opcode = ACLK_DATABASE_TIMER;
     cmd.completion = NULL;
-    aclk_database_enq_cmd(wc, &cmd);
+    aclk_database_enq_cmd_nowait(wc, &cmd);
 
     if (wc->cleanup_after && wc->cleanup_after < now_realtime_sec()) {
 //        cmd.opcode = ACLK_DATABASE_CHECK;
@@ -225,7 +247,8 @@ static void timer_cb(uv_timer_t* handle)
         wc->cleanup_after = 0;
         cmd.opcode = ACLK_DATABASE_UPD_STATS;
         cmd.completion = NULL;
-        aclk_database_enq_cmd(wc, &cmd);
+        if (!aclk_database_enq_cmd_nowait(wc, &cmd))
+            wc->cleanup_after = 0;
     }
 
 //    {
@@ -239,14 +262,14 @@ static void timer_cb(uv_timer_t* handle)
         cmd.count = ACLK_MAX_CHART_BATCH;
         cmd.completion = NULL;
         cmd.param1 = ACLK_MAX_CHART_BATCH_COUNT;
-        aclk_database_enq_cmd(wc, &cmd);
+        aclk_database_enq_cmd_nowait(wc, &cmd);
     }
 
     if (wc->alert_updates) {
         cmd.opcode = ACLK_DATABASE_PUSH_ALERT;
         cmd.count = ACLK_MAX_ALERT_UPDATES;
         cmd.completion = NULL;
-        aclk_database_enq_cmd(wc, &cmd);
+        aclk_database_enq_cmd_nowait(wc, &cmd);
     }
 }
 
@@ -663,12 +686,16 @@ void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct
 
     time_t  now = now_realtime_sec();
 
+    if (unlikely(!now))
+        goto done;
+
     if (now - last_database_check < 120)
         return;
 
-    last_database_check = now;
-
     info("DEBUG: Checking database for %s", wc->uuid_str);
+
+done:
+    last_database_check = now;
 
     return;
 
