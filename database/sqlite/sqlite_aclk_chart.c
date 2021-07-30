@@ -309,7 +309,7 @@ void aclk_status_chart_event(struct aclk_database_worker_config *wc, struct aclk
 //    rc = sqlite3_finalize(res);
 //    if (unlikely(rc != SQLITE_OK))
 //        error_report("Failed to reset statement when searching for a chart UUID, rc = %d", rc);
-//    buffer_reset(sql);
+//    buffer_flush(sql);
 //    buffer_sprintf(sql, "SELECT sequence_id, date_submitted, date_updated FROM aclk_chart_%s "
 //                        "WHERE date_submitted IS NOT NULL ORDER BY sequence_id ASC;" , wc->uuid_str);
 //
@@ -448,13 +448,13 @@ void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_d
             error_report("Failed to reset statement when pushing chart events, rc = %d", rc);
 
         if (likely(first_sequence)) {
-            buffer_reset(sql);
+            buffer_flush(sql);
             buffer_sprintf(sql, "UPDATE aclk_chart_%s SET status = NULL, date_submitted=strftime('%%s') "
                             "WHERE date_submitted IS NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64 ";",
                        wc->uuid_str, first_sequence, last_sequence);
             db_execute(buffer_tostring(sql));
 
-            buffer_reset(sql);
+            buffer_flush(sql);
             buffer_sprintf(sql, "INSERT OR REPLACE INTO aclk_chart_latest_%s (uuid, unique_id, date_submitted) "
                                 " SELECT uuid, unique_id, date_submitted FROM aclk_chart_%s s "
                                 " WHERE date_submitted IS NOT NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64
@@ -834,33 +834,33 @@ void sql_chart_deduplicate(struct aclk_database_worker_config *wc, struct aclk_d
     buffer_sprintf(sql, "DROP TABLE IF EXISTS t_%s;", wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "CREATE TABLE t_%s AS SELECT * FROM aclk_chart_payload_%s WHERE unique_id IN "
         "(SELECT unique_id from aclk_chart_%s WHERE date_submitted IS NULL AND update_count > 0);",
         wc->uuid_str, wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "DELETE FROM aclk_chart_payload_%s WHERE unique_id IN (SELECT unique_id FROM t_%s); " ,
        wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "DELETE FROM aclk_chart_%s WHERE unique_id IN (SELECT unique_id FROM t_%s);",
        wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "DELETE FROM aclk_chart_latest_%s WHERE unique_id IN (SELECT unique_id FROM t_%s);",
        wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "INSERT INTO aclk_chart_payload_%s SELECT * FROM t_%s ORDER BY DATE_CREATED ASC;",
                    wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "INSERT OR REPLACE INTO aclk_chart_latest_%s (uuid, unique_id, date_submitted) "
                         "SELECT uuid, unique_id, date_submitted FROM aclk_chart_%s where sequence_id IN "
                         "(SELECT sequence_id FROM aclk_chart_%s WHERE date_submitted IS NOT NULL "
@@ -868,7 +868,7 @@ void sql_chart_deduplicate(struct aclk_database_worker_config *wc, struct aclk_d
                         , wc->uuid_str, wc->uuid_str, wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
-    buffer_reset(sql);
+    buffer_flush(sql);
     buffer_sprintf(sql, "DROP TABLE IF EXISTS t_%s;", wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
@@ -909,7 +909,7 @@ void sql_get_last_chart_sequence(struct aclk_database_worker_config *wc, struct 
     if (unlikely(rc != SQLITE_OK))
         error_report("Failed to reset statement when fetching chart sequence info, rc = %d", rc);
 
-    fail:
+fail:
     buffer_free(sql);
     return;
 }

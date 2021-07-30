@@ -96,14 +96,16 @@ void aclk_database_enq_cmd_nowake(struct aclk_database_worker_config *wc, struct
     uv_mutex_unlock(&wc->cmd_mutex);
 }
 
-int aclk_database_enq_cmd_nowait(struct aclk_database_worker_config *wc, struct aclk_database_cmd *cmd)
+int aclk_database_enq_cmd_noblock(struct aclk_database_worker_config *wc, struct aclk_database_cmd *cmd)
 {
     unsigned queue_size;
 
     /* wait for free space in queue */
     uv_mutex_lock(&wc->cmd_mutex);
-    if ((queue_size = wc->queue_size) == ACLK_DATABASE_CMD_Q_MAX_SIZE)
+    if ((queue_size = wc->queue_size) == ACLK_DATABASE_CMD_Q_MAX_SIZE) {
+        uv_mutex_unlock(&wc->cmd_mutex);
         return 1;
+    }
 
     fatal_assert(queue_size < ACLK_DATABASE_CMD_Q_MAX_SIZE);
     /* enqueue command */
@@ -114,7 +116,7 @@ int aclk_database_enq_cmd_nowait(struct aclk_database_worker_config *wc, struct 
     uv_mutex_unlock(&wc->cmd_mutex);
 
     /* wake up event loop */
-    fatal_assert(0 == uv_async_send(&wc->async));
+    //fatal_assert(0 == uv_async_send(&wc->async));
     return 0;
 }
 
@@ -237,17 +239,16 @@ static void timer_cb(uv_timer_t* handle)
     struct aclk_database_cmd cmd;
     cmd.opcode = ACLK_DATABASE_TIMER;
     cmd.completion = NULL;
-    aclk_database_enq_cmd_nowait(wc, &cmd);
+    aclk_database_enq_cmd_noblock(wc, &cmd);
 
     if (wc->cleanup_after && wc->cleanup_after < now_realtime_sec()) {
 //        cmd.opcode = ACLK_DATABASE_CHECK;
 //        cmd.completion = NULL;
 //        aclk_database_enq_cmd(wc, &cmd);
 
-        wc->cleanup_after = 0;
         cmd.opcode = ACLK_DATABASE_UPD_STATS;
         cmd.completion = NULL;
-        if (!aclk_database_enq_cmd_nowait(wc, &cmd))
+        if (!aclk_database_enq_cmd_noblock(wc, &cmd))
             wc->cleanup_after = 0;
     }
 
@@ -262,14 +263,14 @@ static void timer_cb(uv_timer_t* handle)
         cmd.count = ACLK_MAX_CHART_BATCH;
         cmd.completion = NULL;
         cmd.param1 = ACLK_MAX_CHART_BATCH_COUNT;
-        aclk_database_enq_cmd_nowait(wc, &cmd);
+        aclk_database_enq_cmd_noblock(wc, &cmd);
     }
 
     if (wc->alert_updates) {
         cmd.opcode = ACLK_DATABASE_PUSH_ALERT;
         cmd.count = ACLK_MAX_ALERT_UPDATES;
         cmd.completion = NULL;
-        aclk_database_enq_cmd_nowait(wc, &cmd);
+        aclk_database_enq_cmd_noblock(wc, &cmd);
     }
 }
 
@@ -285,9 +286,6 @@ void aclk_database_worker(void *arg)
     struct aclk_database_cmd cmd;
     unsigned cmd_batch_size;
 
-    wc->chart_updates = 0;
-    wc->alert_updates = 0;
-
     aclk_database_init_cmd_queue(wc);
     uv_thread_set_name_np(wc->thread, wc->uuid_str);
 
@@ -298,8 +296,6 @@ void aclk_database_worker(void *arg)
         goto error_after_loop_init;
     }
     loop->data = wc;
-
-    aclk_add_worker_thread(wc);
 
     ret = uv_async_init(wc->loop, &wc->async, async_cb);
     if (ret) {
@@ -319,6 +315,7 @@ void aclk_database_worker(void *arg)
     fatal_assert(0 == uv_timer_start(&timer_req, timer_cb, TIMER_PERIOD_MS, TIMER_PERIOD_MS));
     shutdown = 0;
 
+    aclk_add_worker_thread(wc);
 
     info("Starting ACLK sync event loop for host with GUID %s (Host is '%s')", wc->host_guid, wc->host ? "connected" : "not connected");
     sql_get_last_chart_sequence(wc, cmd);
@@ -340,7 +337,14 @@ void aclk_database_worker(void *arg)
             switch (opcode) {
                 case ACLK_DATABASE_NOOP:
                     /* the command queue was empty, do nothing */
-                    sql_maint_aclk_sync_database(wc, cmd);
+                    //sql_maint_aclk_sync_database(wc, cmd);
+//                    if (wc->chart_updates) {
+//                        cmd.count = ACLK_MAX_CHART_BATCH;
+//                        cmd.param1 = ACLK_MAX_CHART_BATCH_COUNT;
+//                        aclk_push_chart_event(wc, cmd);
+//                    }
+//                    if (wc->alert_updates)
+//                        aclk_push_alert_event(wc, cmd);
                     break;
                 case ACLK_DATABASE_CLEANUP:
                     debug(D_ACLK_SYNC, "Database cleanup for %s", wc->uuid_str);
@@ -486,11 +490,11 @@ void aclk_database_worker(void *arg)
     rrd_unlock();
     return;
 
-    error_after_timer_init:
+error_after_timer_init:
     uv_close((uv_handle_t *)&wc->async, NULL);
-    error_after_async_init:
+error_after_async_init:
     fatal_assert(0 == uv_loop_close(loop));
-    error_after_loop_init:
+error_after_loop_init:
     freez(loop);
 
     wc->error = UV_EAGAIN;
@@ -651,17 +655,8 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
 
     buffer_sprintf(sql,TABLE_ACLK_ALERT, uuid_str, uuid_str, uuid_str);
     db_execute(buffer_tostring(sql));
-    buffer_flush(sql);
-//
-//    buffer_sprintf(sql,TABLE_ACLK_ALERT_PAYLOAD, uuid_str);
-//    db_execute(buffer_tostring(sql));
-//
-//    buffer_sprintf(sql,TRIGGER_ACLK_ALERT_PAYLOAD, uuid_str, uuid_str, uuid_str);
-//    db_execute(buffer_tostring(sql));
-//    buffer_flush(sql);
 
     buffer_free(sql);
-
     // Spawn db thread for processing (event loop)
     if (likely(host) && unlikely(host->dbsync_worker))
         return;
@@ -670,6 +665,8 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     if (likely(host))
         host->dbsync_worker = (void *) wc;
     wc->host = host;
+    wc->chart_updates = 0;
+    wc->alert_updates = 0;
     wc->cleanup_after = now_realtime_sec() + 600;
     wc->startup_time = now_realtime_sec();
     strcpy(wc->uuid_str, uuid_str);
@@ -686,7 +683,7 @@ void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct
 
     time_t  now = now_realtime_sec();
 
-    if (unlikely(!now))
+    if (unlikely(!last_database_check))
         goto done;
 
     if (now - last_database_check < 120)
