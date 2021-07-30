@@ -1355,5 +1355,6 @@ extern void set_host_properties(
 #include "sqlite/sqlite_aclk_chart.h"
 #include "sqlite/sqlite_aclk_alert.h"
 #include "sqlite/sqlite_aclk_node.h"
+#include "sqlite/sqlite_health.h"
 
 #endif /* NETDATA_RRD_H */
