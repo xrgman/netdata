@@ -3,6 +3,7 @@
 #ifndef NETDATA_SQLITE_ACLK_ALERT_H
 #define NETDATA_SQLITE_ACLK_ALERT_H
 
+#include "sqlite_functions.h"
 
 extern sqlite3 *db_meta;
 

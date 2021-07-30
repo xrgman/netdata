@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "health.h"
+#include "../database/sqlite/sqlite_health.h"
 
 // ----------------------------------------------------------------------------
 // health alarm log load/save
