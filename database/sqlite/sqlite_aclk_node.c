@@ -55,68 +55,6 @@ void aclk_reset_node_event(struct aclk_database_worker_config *wc, struct aclk_d
 }
 
 
-void sql_drop_host_aclk_table_list(uuid_t *host_uuid)
-{
-    int rc;
-    char uuid_str[GUID_LEN + 1];
-
-    uuid_unparse_lower_fix(host_uuid, uuid_str);
-
-    BUFFER *sql = buffer_create(1024);
-    buffer_sprintf(
-        sql,"SELECT 'drop '||type||' IF EXISTS '||name||';' FROM sqlite_schema " \
-        "WHERE name LIKE 'aclk_%%_%s' AND type IN ('table', 'trigger', 'index');", uuid_str);
-
-    sqlite3_stmt *res = NULL;
-
-    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
-    if (rc != SQLITE_OK) {
-        error_report("Failed to prepare statement to clean up aclk tables");
-        goto fail;
-    }
-    buffer_flush(sql);
-
-    while (sqlite3_step(res) == SQLITE_ROW)
-        buffer_strcat(sql, (char *) sqlite3_column_text(res, 0));
-
-    rc = sqlite3_finalize(res);
-    if (unlikely(rc != SQLITE_OK))
-        error_report("Failed to finalize statement to clean up aclk tables, rc = %d", rc);
-
-    db_execute(buffer_tostring(sql));
-
-    fail:
-    buffer_free(sql);
-}
-
-void sql_aclk_drop_all_table_list()
-{
-    int rc;
-
-    BUFFER *sql = buffer_create(1024);
-    buffer_strcat(sql, "SELECT host_id FROM host;");
-    sqlite3_stmt *res = NULL;
-
-    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
-    if (rc != SQLITE_OK) {
-        error_report("Failed to prepare statement to clean up aclk tables");
-        goto fail;
-    }
-    while (sqlite3_step(res) == SQLITE_ROW) {
-        sql_drop_host_aclk_table_list((uuid_t *)sqlite3_column_blob(res, 0));
-    }
-
-    rc = sqlite3_finalize(res);
-    if (unlikely(rc != SQLITE_OK))
-        error_report("Failed to finalize statement to clean up aclk tables, rc = %d", rc);
-
-    fail:
-    buffer_free(sql);
-    return;
-}
-
-
-
 void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
 {
     UNUSED(cmd);
