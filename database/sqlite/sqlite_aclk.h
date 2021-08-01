@@ -105,6 +105,12 @@ static inline char *get_str_from_uuid(uuid_t *uuid)
         "insert into aclk_alert_%s (alert_unique_id, date_created) " \
         "select unique_id alert_unique_id, strftime('%%s') date_created from health_log_%s where new_status <> 0 order by unique_id asc;"
 
+#define INDEX_ACLK_CHART "CREATE INDEX IF NOT EXISTS aclk_chart_index_%s ON aclk_chart_%s (unique_id);"
+
+#define INDEX_ACLK_CHART_LATEST  "CREATE INDEX IF NOT EXISTS aclk_chart_latest_index_%s ON aclk_chart_latest_%s (unique_id);"
+
+#define INDEX_ACLK_ALERT "CREATE INDEX IF NOT EXISTS aclk_alert_index_%s ON aclk_alert_%s (alert_unique_id);"
+
 enum aclk_database_opcode {
     ACLK_DATABASE_NOOP = 0,
     ACLK_DATABASE_CLEANUP,
