@@ -82,7 +82,7 @@ static inline char *get_str_from_uuid(uuid_t *uuid)
     return strdupz(uuid_str);
 }
 
-#define TABLE_ACLK_CHART "CREATE TABLE IF NOT EXISTS aclk_chart_%s (sequence_id INTEGER PRIMARY KEY, " \
+#define TABLE_ACLK_CHART "CREATE TABLE IF NOT EXISTS aclk_chart_%s (sequence_id INTEGER PRIMARY KEY AUTOINCREMENT, " \
         "date_created, date_updated, date_submitted, status, uuid, type, unique_id, " \
         "update_count default 1, unique(uuid, status));"
 
@@ -99,7 +99,7 @@ static inline char *get_str_from_uuid(uuid_t *uuid)
         " do update set unique_id = new.unique_id, update_count = update_count + 1; " \
         "end;"
 
-#define TABLE_ACLK_ALERT "CREATE TABLE IF NOT EXISTS aclk_alert_%s (sequence_id INTEGER PRIMARY KEY, " \
+#define TABLE_ACLK_ALERT "CREATE TABLE IF NOT EXISTS aclk_alert_%s (sequence_id INTEGER PRIMARY KEY AUTOINCREMENT, " \
         "alert_unique_id, date_created, date_submitted, " \
         "unique(alert_unique_id)); " \
         "insert into aclk_alert_%s (alert_unique_id, date_created) " \
@@ -182,6 +182,10 @@ struct aclk_database_worker_config {
     int alert_updates;
     time_t batch_created;
     struct aclk_database_worker_config  *next;
+//    RRDSET *chart_add;      // Chart events added
+//    RRDSET *chart_snd;      // Chart events sent
+//    RRDSET *alert_add;      // Alert events added
+//    RRDSET *alert_snd;      // Alert events sent
 };
 
 static inline RRDHOST *find_host_by_node_id(char *node_id)
@@ -212,6 +216,6 @@ void sql_aclk_sync_init(void);
 void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 void sql_delete_aclk_table_list(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 void sql_drop_host_aclk_table_list(uuid_t *host_uuid);
-void sql_cleanup_aclk_table_list(struct aclk_database_worker_config *wc);
-int is_host_available(uuid_t *host_id);
+void sql_check_aclk_table_list(struct aclk_database_worker_config *wc);
+//int is_host_available(uuid_t *host_id);
 #endif //NETDATA_SQLITE_ACLK_H

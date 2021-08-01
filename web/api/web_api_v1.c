@@ -406,7 +406,7 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
     int resync_nodes = 0;
     int chart_updates = 0;
     int alert_updates = 0;
-    int drop_tables = 0;
+//    int drop_tables = 0;
     int create_tables = 0;
     int stop_thread = 0;
     int update_info = 0;
@@ -431,7 +431,7 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
         if(!strcmp(name, "resync_nodes")) resync_nodes = 1;
         if(!strcmp(name, "chart_updates")) chart_updates = atoi(value);
         if(!strcmp(name, "alert_updates")) alert_updates = atoi(value);
-        if(!strcmp(name, "drop_tables")) drop_tables = atoi(value);
+//        if(!strcmp(name, "drop_tables")) drop_tables = atoi(value);
         if(!strcmp(name, "stop_thread")) stop_thread = atoi(value);
         if(!strcmp(name, "create_tables")) create_tables = atoi(value);
         if(!strcmp(name, "chart_seq_ack")) chart_seq_ack = atoi(value);
@@ -445,12 +445,12 @@ inline int web_client_api_request_v1_aclk_sync(RRDHOST *host, struct web_client 
         ///}
     }
 
-    if (drop_tables) {
-        sql_drop_host_aclk_table_list(&host->host_uuid);
-        buffer_sprintf(w->response.data, "ACLK_SYNC: ACLK related tables dropped for host %s", host->hostname);
-        buffer_no_cacheable(w->response.data);
-        return HTTP_RESP_OK;
-    }
+//    if (drop_tables) {
+//        sql_drop_host_aclk_table_list(&host->host_uuid);
+//        buffer_sprintf(w->response.data, "ACLK_SYNC: ACLK related tables dropped for host %s", host->hostname);
+//        buffer_no_cacheable(w->response.data);
+//        return HTTP_RESP_OK;
+//    }
 
     if (chart_seq_ack) {
         char node_str[GUID_LEN + 1];
