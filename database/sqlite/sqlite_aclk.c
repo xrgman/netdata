@@ -335,13 +335,13 @@ void aclk_database_worker(void *arg)
     timer_req.data = wc;
     fatal_assert(0 == uv_timer_start(&timer_req, timer_cb, TIMER_PERIOD_MS, TIMER_PERIOD_MS));
 
-    ret = uv_timer_init(loop, &timer_metrics);
-    if (ret) {
-        error("uv_timer_init(): %s", uv_strerror(ret));
-        goto error_after_timer_init;
-    }
-    timer_metrics.data = wc;
-    fatal_assert(0 == uv_timer_start(&timer_metrics, timer_metrics_cb, 10000, 10000));
+//    ret = uv_timer_init(loop, &timer_metrics);
+//    if (ret) {
+//        error("uv_timer_init(): %s", uv_strerror(ret));
+//        goto error_after_timer_init;
+//    }
+//    timer_metrics.data = wc;
+//    fatal_assert(0 == uv_timer_start(&timer_metrics, timer_metrics_cb, 10000, 10000));
 
     wc->error = 0;
     shutdown = 0;
