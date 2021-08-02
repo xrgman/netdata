@@ -230,6 +230,7 @@ void health_reload(void) {
     if (netdata_cloud_setting) {
         aclk_single_update_enable();
         aclk_alarm_reload();
+        aclk_alert_reloaded = 1;
     }
 #endif
 }
@@ -1007,6 +1008,13 @@ void *health_main(void *ptr) {
                 }
 
                 rrdhost_unlock(host);
+
+#ifdef ENABLE_ACLK
+                if (netdata_cloud_setting && aclk_alert_reloaded) {
+                    sql_queue_removed_alerts_to_aclk(host);
+                    aclk_alert_reloaded = 0;
+                }
+#endif
             }
 
             if (unlikely(netdata_exit))

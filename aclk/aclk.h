@@ -26,6 +26,7 @@ extern int aclk_kill_link;
 extern int aclk_connected;
 extern int chart_batch_id;
 
+extern int aclk_alert_reloaded;
 extern time_t aclk_block_until;
 
 extern usec_t aclk_session_us;

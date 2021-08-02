@@ -28,6 +28,8 @@ int aclk_disable_single_updates = 0;
 int aclk_kill_link = 0;
 int chart_batch_id;
 
+int aclk_alert_reloaded = 1; //1 on startup, and again on health_reload
+
 int aclk_pubacks_per_conn = 0; // How many PubAcks we got since MQTT conn est.
 
 time_t aclk_block_until = 0;

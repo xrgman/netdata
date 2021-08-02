@@ -506,6 +506,9 @@ void sql_queue_alarm_to_aclk(RRDHOST *host, ALARM_ENTRY *ae)
     if (ae->flags & HEALTH_ENTRY_FLAG_ACLK_QUEUED)
         return;
 
+    if (ae->new_status == RRDCALC_STATUS_REMOVED)
+        return;
+
     if (unlikely(!host->dbsync_worker))
         return;
 
@@ -573,14 +576,8 @@ int rrdcalc_status_to_proto_enum(RRDCALC_STATUS status)
         case RRDCALC_STATUS_UNDEFINED:
             return ALARM_STATUS_NOT_A_NUMBER;
 
-            /* case RRDCALC_STATUS_UNINITIALIZED: */
-            /*     return "UNINITIALIZED"; */
-
         case RRDCALC_STATUS_CLEAR:
             return ALARM_STATUS_CLEAR;
-
-            /* case RRDCALC_STATUS_RAISED: */
-            /*     return "RAISED"; */
 
         case RRDCALC_STATUS_WARNING:
             return ALARM_STATUS_WARNING;
@@ -589,7 +586,6 @@ int rrdcalc_status_to_proto_enum(RRDCALC_STATUS status)
             return ALARM_STATUS_CRITICAL;
 
         default:
-            error("Unknown alarm status %d", status);
             return ALARM_STATUS_UNKNOWN;
     }
 }
@@ -1034,4 +1030,31 @@ void aclk_start_alert_streaming(char *node_id, uint64_t batch_id, uint64_t start
     rrd_unlock();
 
     return;
+}
+
+void sql_queue_removed_alerts_to_aclk(RRDHOST *host)
+{
+    if (unlikely(!db_meta)) {
+        if (default_rrd_memory_mode != RRD_MEMORY_MODE_DBENGINE) {
+            return;
+        }
+        error_report("Database has not been initialized");
+        return;
+    }
+
+    char uuid_str[GUID_LEN + 1];
+    uuid_unparse_lower(host->host_uuid, uuid_str);
+    uuid_str[8] = '_';
+    uuid_str[13] = '_';
+    uuid_str[18] = '_';
+    uuid_str[23] = '_';
+
+    BUFFER *sql = buffer_create(1024);
+
+    buffer_sprintf(sql,"insert into aclk_alert_%s (alert_unique_id, date_created) " \
+                   "select unique_id alert_unique_id, strftime('%%s') date_created from health_log_%s where new_status = -2 and updated_by_id = 0 and unique_id not in (select alert_unique_id from aclk_alert_%s) order by unique_id asc on conflict (alert_unique_id) do nothing;", uuid_str, uuid_str, uuid_str);
+
+    db_execute(buffer_tostring(sql));
+
+    buffer_free(sql);
 }
