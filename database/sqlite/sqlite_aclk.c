@@ -296,7 +296,7 @@ void aclk_database_worker(void *arg)
     int shutdown, ret;
     enum aclk_database_opcode opcode;
     uv_timer_t timer_req;
-    uv_timer_t timer_metrics;
+    //uv_timer_t timer_metrics;
     struct aclk_database_cmd cmd;
     unsigned cmd_batch_size;
 
@@ -480,8 +480,8 @@ void aclk_database_worker(void *arg)
                     fatal_assert(0 == uv_timer_stop(&timer_req));
                     uv_close((uv_handle_t *)&timer_req, NULL);
 
-                    fatal_assert(0 == uv_timer_stop(&timer_metrics));
-                    uv_close((uv_handle_t *)&timer_metrics, NULL);
+//                    fatal_assert(0 == uv_timer_stop(&timer_metrics));
+//                    uv_close((uv_handle_t *)&timer_metrics, NULL);
                     break;
                 default:
                     debug(D_ACLK_SYNC, "%s: default.", __func__);
