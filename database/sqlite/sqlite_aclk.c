@@ -296,7 +296,7 @@ void aclk_database_worker(void *arg)
     int shutdown, ret;
     enum aclk_database_opcode opcode;
     uv_timer_t timer_req;
-    uv_timer_t timer_metrics;
+    //uv_timer_t timer_metrics;
     struct aclk_database_cmd cmd;
     unsigned cmd_batch_size;
 
@@ -335,13 +335,13 @@ void aclk_database_worker(void *arg)
     timer_req.data = wc;
     fatal_assert(0 == uv_timer_start(&timer_req, timer_cb, TIMER_PERIOD_MS, TIMER_PERIOD_MS));
 
-    ret = uv_timer_init(loop, &timer_metrics);
-    if (ret) {
-        error("uv_timer_init(): %s", uv_strerror(ret));
-        goto error_after_timer_init;
-    }
-    timer_metrics.data = wc;
-    fatal_assert(0 == uv_timer_start(&timer_metrics, timer_metrics_cb, 10000, 10000));
+//    ret = uv_timer_init(loop, &timer_metrics);
+//    if (ret) {
+//        error("uv_timer_init(): %s", uv_strerror(ret));
+//        goto error_after_timer_init;
+//    }
+//    timer_metrics.data = wc;
+//    fatal_assert(0 == uv_timer_start(&timer_metrics, timer_metrics_cb, 10000, 10000));
 
     wc->error = 0;
     shutdown = 0;
@@ -480,8 +480,8 @@ void aclk_database_worker(void *arg)
                     fatal_assert(0 == uv_timer_stop(&timer_req));
                     uv_close((uv_handle_t *)&timer_req, NULL);
 
-                    fatal_assert(0 == uv_timer_stop(&timer_metrics));
-                    uv_close((uv_handle_t *)&timer_metrics, NULL);
+//                    fatal_assert(0 == uv_timer_stop(&timer_metrics));
+//                    uv_close((uv_handle_t *)&timer_metrics, NULL);
                     break;
                 default:
                     debug(D_ACLK_SYNC, "%s: default.", __func__);
