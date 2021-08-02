@@ -762,6 +762,8 @@ void sql_health_alarm_log_load(RRDHOST *host) {
             alarm_id = rrdcalc_get_unique_id(host, (const char *) sqlite3_column_text(res, 14), (const char *) sqlite3_column_text(res, 13), NULL);
         ae->alarm_id = alarm_id;
 
+        uuid_copy(ae->config_hash_id, *((uuid_t *) sqlite3_column_blob(res, 4)));
+
         ae->alarm_event_id = sqlite3_column_int(res, 3);
         ae->updated_by_id = sqlite3_column_int(res, 5);
         ae->updates_id = sqlite3_column_int(res, 6);

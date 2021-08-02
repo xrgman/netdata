@@ -14,5 +14,6 @@ void aclk_push_alarm_health_log(struct aclk_database_worker_config *wc, struct a
 void aclk_send_alarm_configuration (char *config_hash);
 int aclk_push_alert_config_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 void aclk_start_alert_streaming(char *node_id, uint64_t batch_id, uint64_t start_seq_id);
+void sql_queue_removed_alerts_to_aclk(RRDHOST *host);
 
 #endif //NETDATA_SQLITE_ACLK_ALERT_H
