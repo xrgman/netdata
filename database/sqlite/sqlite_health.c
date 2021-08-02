@@ -35,6 +35,10 @@ int sql_create_health_log_table(RRDHOST *host) {
         return 1;
     }
 
+    snprintfz(command, MAX_HEALTH_SQL_SIZE, "CREATE INDEX IF NOT EXISTS "
+            "health_log_index_%s ON health_log_%s (unique_id); ", uuid_str, uuid_str);
+    db_execute(command);
+
     return 0;
 }
 

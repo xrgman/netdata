@@ -18,7 +18,7 @@ extern void sql_queue_alarm_to_aclk(RRDHOST *host, ALARM_ENTRY *ae);
 extern void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id);
 int aclk_add_chart_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 int aclk_add_dimension_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
-int aclk_push_chart_config_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
+int aclk_push_chart_config(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 void sql_reset_chart_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);
 void aclk_reset_chart_event(char *node_id, uint64_t last_sequence_id);
 void aclk_status_chart_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd);

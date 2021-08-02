@@ -660,6 +660,8 @@ void aclk_push_alert_event(struct aclk_database_worker_config *wc, struct aclk_d
 
 //    int count = 0;
     char *claim_id = is_agent_claimed();
+    uint64_t  first_sequence_id = 0;
+    uint64_t  last_sequence_id = 0;
     while (sqlite3_step(res) == SQLITE_ROW) {
 
         struct alarm_log_entry alarm_log;
@@ -715,14 +717,24 @@ void aclk_push_alert_event(struct aclk_database_worker_config *wc, struct aclk_d
         info("DEBUG: %s pushing alert seq %" PRIu64 " - %" PRIu64"", wc->uuid_str, (uint64_t) sqlite3_column_int64(res, 0), (uint64_t) sqlite3_column_int64(res, 1));
         aclk_send_alarm_log_entry(&alarm_log);
 
-        buffer_sprintf(sql, "UPDATE aclk_alert_%s SET date_submitted=strftime('%%s') "
-                            "WHERE sequence_id = %" PRIu64 " AND alert_unique_id = %" PRIu64 ";",
-                       wc->uuid_str, (uint64_t) sqlite3_column_int64(res, 0), (uint64_t) sqlite3_column_int64(res, 1));
+        if (first_sequence_id == 0)
+            first_sequence_id  = (uint64_t) sqlite3_column_int64(res, 0);
+        last_sequence_id = (uint64_t) sqlite3_column_int64(res, 0);
 
-        db_execute(buffer_tostring(sql));
+//        buffer_sprintf(sql, "UPDATE aclk_alert_%s SET date_submitted=strftime('%%s') "
+//                            "WHERE sequence_id = %" PRIu64 " AND alert_unique_id = %" PRIu64 ";",
+//                       wc->uuid_str, (uint64_t) sqlite3_column_int64(res, 0), (uint64_t) sqlite3_column_int64(res, 1));
+//
+//        db_execute(buffer_tostring(sql));
         destroy_alarm_log_entry(&alarm_log);
         freez(edit_command);
     }
+    buffer_flush(sql);
+
+    buffer_sprintf(sql, "UPDATE aclk_alert_%s SET date_submitted=strftime('%%s') "
+                        "WHERE date_submitted IS NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64 ";",
+                   wc->uuid_str, first_sequence_id, last_sequence_id);
+    db_execute(buffer_tostring(sql));
 
     rc = sqlite3_finalize(res);
     if (unlikely(rc != SQLITE_OK)) {
@@ -1006,10 +1018,12 @@ void aclk_start_alert_streaming(char *node_id, uint64_t batch_id, uint64_t start
         if (host->node_id && !(uuid_compare(*host->node_id, node_uuid))) {
             wc = (struct aclk_database_worker_config *)host->dbsync_worker;
             if (likely(wc)) {
-                wc->alert_updates = 1;
+                info("START streaming alerts for %s enabled with batch_id %"PRIu64" and start_seq_id %"PRIu64, node_id, batch_id, start_seq_id);
+                __sync_synchronize();
                 wc->alerts_batch_id = batch_id;
                 wc->alerts_start_seq_id = start_seq_id;
-                info("START streaming alerts for %s enabled with batch_id %"PRIu64" and start_seq_id %"PRIu64, node_id, batch_id, start_seq_id);
+                wc->alert_updates = 1;
+                __sync_synchronize();
             }
             else
                 error("ACLK synchronization thread is not active for host %s", host->hostname);

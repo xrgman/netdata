@@ -67,7 +67,7 @@ int aclk_add_chart_payload(char *uuid_str, uuid_t *uuid, char *claim_id, ACLK_PA
     BUFFER *sql = buffer_create(1024);
 
     buffer_sprintf(sql,"INSERT INTO aclk_chart_payload_%s (unique_id, uuid, claim_id, date_created, type, payload) " \
-                 "VALUES (@unique_id, @uuid, @claim_id, strftime('%%s'), @type, @payload);", uuid_str);
+                 "VALUES (@unique_id, @uuid, @claim_id, strftime('%%s','now'), @type, @payload);", uuid_str);
 
     rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res_chart, 0);
     if (unlikely(rc != SQLITE_OK)) {
@@ -347,7 +347,8 @@ void aclk_status_chart_event(struct aclk_database_worker_config *wc, struct aclk
 }
 
 
-int sql_queue_chart_payload(struct aclk_database_worker_config *wc, void *data, enum aclk_database_opcode opcode)
+static inline int sql_queue_chart_payload(struct aclk_database_worker_config *wc,
+        void *data, enum aclk_database_opcode opcode)
 {
     if (unlikely(!wc))
         return 1;
@@ -363,12 +364,14 @@ int sql_queue_chart_payload(struct aclk_database_worker_config *wc, void *data, 
 // ST is read locked
 int sql_queue_chart_to_aclk(RRDSET *st)
 {
-    return sql_queue_chart_payload((struct aclk_database_worker_config *) st->rrdhost->dbsync_worker, st, ACLK_DATABASE_ADD_CHART);
+    return sql_queue_chart_payload((struct aclk_database_worker_config *) st->rrdhost->dbsync_worker,
+                                   st, ACLK_DATABASE_ADD_CHART);
 }
 
 int sql_queue_dimension_to_aclk(RRDDIM *rd)
 {
-    return sql_queue_chart_payload((struct aclk_database_worker_config *) rd->rrdset->rrdhost->dbsync_worker, rd, ACLK_DATABASE_ADD_DIMENSION);
+    return sql_queue_chart_payload((struct aclk_database_worker_config *) rd->rrdset->rrdhost->dbsync_worker,
+                                   rd, ACLK_DATABASE_ADD_DIMENSION);
 }
 
 void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
@@ -449,7 +452,7 @@ void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_d
 
         if (likely(first_sequence)) {
             buffer_flush(sql);
-            buffer_sprintf(sql, "UPDATE aclk_chart_%s SET status = NULL, date_submitted=strftime('%%s') "
+            buffer_sprintf(sql, "UPDATE aclk_chart_%s SET status = NULL, date_submitted=strftime('%%s','now') "
                             "WHERE date_submitted IS NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64 ";",
                        wc->uuid_str, first_sequence, last_sequence);
             db_execute(buffer_tostring(sql));
@@ -684,7 +687,8 @@ void aclk_get_chart_config(char **hash_id)
     return;
 }
 
-int aclk_push_chart_config_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
+// Push one chart config to the cloud
+int aclk_push_chart_config(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
 {
     UNUSED(wc);
     sqlite3_stmt *res = NULL;
@@ -699,6 +703,15 @@ int aclk_push_chart_config_event(struct aclk_database_worker_config *wc, struct 
     }
 
     char *hash_id = (char *) cmd.data_param;
+
+    uuid_t hash_uuid;
+    rc = uuid_parse(hash_id, hash_uuid);
+
+    if (unlikely(rc)) {
+        freez((char *) cmd.data_param);
+        return 1;
+    }
+
     BUFFER *sql = buffer_create(1024);
     buffer_sprintf(sql, "SELECT type, family, context, title, priority, plugin, module, unit, chart_type " \
                         "FROM chart_hash WHERE hash_id = @hash_id;");
@@ -709,8 +722,6 @@ int aclk_push_chart_config_event(struct aclk_database_worker_config *wc, struct 
         goto fail;
     }
 
-    uuid_t hash_uuid;
-    uuid_parse(hash_id, hash_uuid);
     rc = sqlite3_bind_blob(res, 1, &hash_uuid , sizeof(hash_uuid), SQLITE_STATIC);
     if (unlikely(rc != SQLITE_OK))
         goto bind_fail;
@@ -734,13 +745,13 @@ int aclk_push_chart_config_event(struct aclk_database_worker_config *wc, struct 
 
     aclk_chart_config_updated(&chart_config, 1);
     destroy_chart_config_updated(&chart_config);
-    freez((char *) cmd.data_param);
 
 bind_fail:
     rc = sqlite3_finalize(res);
     if (unlikely(rc != SQLITE_OK))
         error_report("Failed to reset statement when pushing chart config hash, rc = %d", rc);
 fail:
+    freez((char *) cmd.data_param);
     buffer_free(sql);
     return rc;
 }
@@ -752,8 +763,8 @@ void sql_set_chart_ack(struct aclk_database_worker_config *wc, struct aclk_datab
 
     BUFFER *sql = buffer_create(1024);
 
-    buffer_sprintf(sql, "UPDATE aclk_chart_%s set date_updated=strftime('%%s') WHERE sequence_id <= @sequence_id "
-                        "AND date_submitted IS NOT NULL AND date_updated IS NULL;", wc->uuid_str);
+    buffer_sprintf(sql, "UPDATE aclk_chart_%s SET date_updated=strftime('%%s','now') WHERE sequence_id <= @sequence_id "
+        "AND date_submitted IS NOT NULL AND date_updated IS NULL;", wc->uuid_str);
 
     rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
     if (rc != SQLITE_OK) {
@@ -767,13 +778,13 @@ void sql_set_chart_ack(struct aclk_database_worker_config *wc, struct aclk_datab
 
     rc = execute_insert(res);
     if (rc != SQLITE_DONE)
-        error_report("Failed to delete sequence ids, rc = %d", rc);
+        error_report("Failed to ACK sequence id, rc = %d", rc);
 
-    bind_fail:
+bind_fail:
     if (unlikely(sqlite3_finalize(res) != SQLITE_OK))
-        error_report("Failed to finalize statement to delete older sequence ids, rc = %d", rc);
+        error_report("Failed to finalize statement to ACK older sequence ids, rc = %d", rc);
 
-    prepare_fail:
+prepare_fail:
     buffer_free(sql);
     return;
 }
@@ -933,7 +944,6 @@ void aclk_start_streaming(char *node_id, uint64_t sequence_id, time_t created_at
         if (host->node_id && !(uuid_compare(*host->node_id, node_uuid))) {
             wc = (struct aclk_database_worker_config *)host->dbsync_worker;
             if (likely(wc)) {
-
                 if (unlikely(!wc->chart_updates)) {
                     struct aclk_database_cmd cmd;
                     cmd.opcode = ACLK_DATABASE_NODE_INFO;

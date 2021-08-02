@@ -28,6 +28,15 @@ int aclk_architecture = 0;
 uv_mutex_t aclk_async_lock;
 struct aclk_database_worker_config  *aclk_thread_head = NULL;
 
+static inline int claimed()
+{
+    int rc;
+    rrdhost_aclk_state_lock(localhost);
+    rc = (localhost->aclk_state.claimed_id != NULL);
+    rrdhost_aclk_state_unlock(localhost);
+    return rc;
+}
+
 void aclk_add_worker_thread(struct aclk_database_worker_config *wc)
 {
     if (unlikely(!wc))
@@ -59,9 +68,10 @@ void aclk_del_worker_thread(struct aclk_database_worker_config *wc)
 int aclk_worker_thread_exists(char *guid)
 {
     int rc = 0;
+    uv_mutex_lock(&aclk_async_lock);
+
     struct aclk_database_worker_config *tmp = aclk_thread_head;
 
-    uv_mutex_lock(&aclk_async_lock);
     while (tmp && !rc) {
         rc = strcmp(tmp->uuid_str, guid) == 0;
         tmp = tmp->next;
@@ -228,6 +238,15 @@ static void async_cb(uv_async_t *handle)
     debug(D_ACLK_SYNC, "%s called, active=%d.", __func__, uv_is_active((uv_handle_t *)handle));
 }
 
+static void timer_metrics_cb(uv_timer_t* handle)
+{
+    struct aclk_database_worker_config *wc = handle->data;
+    uv_stop(handle->loop);
+    uv_update_time(handle->loop);
+
+    info("DEBUG: Metrics callback for %s", wc->uuid_str);
+}
+
 #define TIMER_PERIOD_MS (1000)
 
 static void timer_cb(uv_timer_t* handle)
@@ -242,21 +261,15 @@ static void timer_cb(uv_timer_t* handle)
     aclk_database_enq_cmd_noblock(wc, &cmd);
 
     if (wc->cleanup_after && wc->cleanup_after < now_realtime_sec()) {
-//        cmd.opcode = ACLK_DATABASE_CHECK;
-//        cmd.completion = NULL;
-//        aclk_database_enq_cmd(wc, &cmd);
-
-        cmd.opcode = ACLK_DATABASE_UPD_STATS;
+        cmd.opcode = ACLK_DATABASE_CLEANUP;
         cmd.completion = NULL;
-        if (!aclk_database_enq_cmd_noblock(wc, &cmd))
-            wc->cleanup_after = 0;
-    }
+//        aclk_database_enq_cmd_noblock(wc, &cmd);
 
-//    {
-//        cmd.opcode = ACLK_DATABASE_CHECK_ROTATION;
+//        cmd.opcode = ACLK_DATABASE_UPD_STATS;
 //        cmd.completion = NULL;
-//        aclk_database_enq_cmd(wc, &cmd);
-//    }
+        if (!aclk_database_enq_cmd_noblock(wc, &cmd))
+            wc->cleanup_after += ACLK_DATABASE_CLEANUP_INTERVAL;
+    }
 
     if (wc->chart_updates) {
         cmd.opcode = ACLK_DATABASE_PUSH_CHART;
@@ -283,11 +296,21 @@ void aclk_database_worker(void *arg)
     int shutdown, ret;
     enum aclk_database_opcode opcode;
     uv_timer_t timer_req;
+    uv_timer_t timer_metrics;
     struct aclk_database_cmd cmd;
     unsigned cmd_batch_size;
 
     aclk_database_init_cmd_queue(wc);
-    uv_thread_set_name_np(wc->thread, wc->uuid_str);
+    //uv_thread_set_name_np(wc->thread, wc->uuid_str);
+
+    char threadname[NETDATA_THREAD_NAME_MAX+1];
+    if (wc->host)
+        snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS_%s", wc->host->hostname);
+    else {
+        snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS_%s", wc->uuid_str);
+        threadname[11] = '\0';
+    }
+    uv_thread_set_name_np(wc->thread, threadname);
 
     loop = wc->loop = mallocz(sizeof(uv_loop_t));
     ret = uv_loop_init(loop);
@@ -310,14 +333,22 @@ void aclk_database_worker(void *arg)
         goto error_after_timer_init;
     }
     timer_req.data = wc;
+    fatal_assert(0 == uv_timer_start(&timer_req, timer_cb, TIMER_PERIOD_MS, TIMER_PERIOD_MS));
+
+    ret = uv_timer_init(loop, &timer_metrics);
+    if (ret) {
+        error("uv_timer_init(): %s", uv_strerror(ret));
+        goto error_after_timer_init;
+    }
+    timer_metrics.data = wc;
+    fatal_assert(0 == uv_timer_start(&timer_metrics, timer_metrics_cb, 10000, 10000));
 
     wc->error = 0;
-    fatal_assert(0 == uv_timer_start(&timer_req, timer_cb, TIMER_PERIOD_MS, TIMER_PERIOD_MS));
     shutdown = 0;
 
     aclk_add_worker_thread(wc);
 
-    info("Starting ACLK sync event loop for host with GUID %s (Host is '%s')", wc->host_guid, wc->host ? "connected" : "not connected");
+    info("Starting ACLK sync event loop for host with GUID %s (Host is '%s') -- locahost = %s", wc->host_guid, wc->host ? "connected" : "not connected", localhost? "true" : "false");
     sql_get_last_chart_sequence(wc, cmd);
     while (likely(shutdown == 0)) {
         uv_run(loop, UV_RUN_DEFAULT);
@@ -337,18 +368,12 @@ void aclk_database_worker(void *arg)
             switch (opcode) {
                 case ACLK_DATABASE_NOOP:
                     /* the command queue was empty, do nothing */
-                    //sql_maint_aclk_sync_database(wc, cmd);
-//                    if (wc->chart_updates) {
-//                        cmd.count = ACLK_MAX_CHART_BATCH;
-//                        cmd.param1 = ACLK_MAX_CHART_BATCH_COUNT;
-//                        aclk_push_chart_event(wc, cmd);
-//                    }
-//                    if (wc->alert_updates)
-//                        aclk_push_alert_event(wc, cmd);
                     break;
                 case ACLK_DATABASE_CLEANUP:
                     debug(D_ACLK_SYNC, "Database cleanup for %s", wc->uuid_str);
                     sql_maint_aclk_sync_database(wc, cmd);
+                    if (wc->host == localhost)
+                        sql_check_aclk_table_list(wc);
                     break;
                 case ACLK_DATABASE_CHECK:
                     debug(D_ACLK_SYNC, "Checking database dimensions for %s", wc->uuid_str);
@@ -364,7 +389,7 @@ void aclk_database_worker(void *arg)
                     break;
                 case ACLK_DATABASE_PUSH_CHART_CONFIG:
                     debug(D_ACLK_SYNC, "Pushing chart config info to the cloud for node %s", wc->uuid_str);
-                    aclk_push_chart_config_event(wc, cmd);
+                    aclk_push_chart_config(wc, cmd);
                     break;
                 case ACLK_DATABASE_CHART_ACK:
                     debug(D_ACLK_SYNC, "ACK chart SEQ for %s to %"PRIu64, wc->uuid_str, (uint64_t) cmd.param1);
@@ -410,16 +435,23 @@ void aclk_database_worker(void *arg)
                     debug(D_ACLK_SYNC,"Sending node info for %s", wc->uuid_str);
                     sql_build_node_info(wc, cmd);
                     break;
+                case ACLK_DATABASE_DELETE_HOST:     // aclk related tables need to be deleted
+                    debug(D_ACLK_SYNC,"Cleaning ACLK tables for %s", (char *) cmd.data);
+                    sql_delete_aclk_table_list(wc, cmd);
+                    break;
                 case ACLK_DATABASE_UPD_STATS:
                     sql_update_metric_statistics(wc, cmd);
                     break;
                 case ACLK_DATABASE_TIMER:
                     if (unlikely(localhost && !wc->host)) {
-                        char *agent_id = is_agent_claimed();
-                        if (agent_id) {
+                        //char *agent_id = is_agent_claimed();
+                        if (claimed()) {
                             wc->host = rrdhost_find_by_guid(wc->host_guid, 0);
                             if (wc->host) {
                                 info("HOST %s detected as active and claimed !!!", wc->host->hostname);
+                                //char threadname[NETDATA_THREAD_NAME_MAX+1];
+                                snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS_%s", wc->host->hostname);
+                                uv_thread_set_name_np(wc->thread, threadname);
                                 wc->host->dbsync_worker = wc;
                                 aclk_del_worker_thread(wc);
                                 if (wc->host->node_id) {
@@ -431,7 +463,7 @@ void aclk_database_worker(void *arg)
                                 //cmd.completion = NULL;
                                 //aclk_database_enq_cmd(wc, &cmd);
                             }
-                            freez(agent_id);
+                            //freez(agent_id);
                         }
                     }
                     break;
@@ -447,6 +479,9 @@ void aclk_database_worker(void *arg)
                     shutdown = 1;
                     fatal_assert(0 == uv_timer_stop(&timer_req));
                     uv_close((uv_handle_t *)&timer_req, NULL);
+
+                    fatal_assert(0 == uv_timer_stop(&timer_metrics));
+                    uv_close((uv_handle_t *)&timer_metrics, NULL);
                     break;
                 default:
                     debug(D_ACLK_SYNC, "%s: default.", __func__);
@@ -525,14 +560,20 @@ void aclk_set_architecture(int mode)
 //    struct timeval rotation_timestamp;
 //};
 
-#define SELECT_HOST_DIMENSION_LIST  "SELECT d.dim_id, c.update_every FROM chart c, dimension d, host h " \
+#define SELECT_HOST_DIMENSION_LIST  "SELECT d.dim_id, c.update_every, c.type||'.'||c.id FROM chart c, dimension d, host h " \
         "WHERE d.chart_id = c.chart_id AND c.host_id = h.host_id AND c.host_id = @host_id ORDER BY c.update_every ASC;"
+
+#define SELECT_HOST_CHART_LIST  "SELECT distinct h.host_id, c.update_every, c.type||'.'||c.id FROM chart c, host h " \
+        "WHERE c.host_id = h.host_id AND c.host_id = @host_id ORDER BY c.update_every ASC;"
 
 void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
 {
     UNUSED(cmd);
-#ifdef ENABLE_DBENGINE
+
     int rc;
+
+    if (unlikely(!wc->host))
+        return;
 
     char *claim_id = is_agent_claimed();
     if (unlikely(!claim_id))
@@ -540,7 +581,11 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
 
     sqlite3_stmt *res = NULL;
 
-    rc = sqlite3_prepare_v2(db_meta, SELECT_HOST_DIMENSION_LIST, -1, &res, 0);
+    if (wc->host->rrd_memory_mode == RRD_MEMORY_MODE_DBENGINE)
+        rc = sqlite3_prepare_v2(db_meta, SELECT_HOST_DIMENSION_LIST, -1, &res, 0);
+    else
+        rc = sqlite3_prepare_v2(db_meta, SELECT_HOST_CHART_LIST, -1, &res, 0);
+
     if (unlikely(rc != SQLITE_OK)) {
         error_report("Failed to prepare statement to fetch host dimensions");
         return;
@@ -562,20 +607,19 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
 
     time_t  start_time = LONG_MAX;
     time_t  first_entry_t;
-    time_t  last_entry_t;
     uint32_t update_every = 0;
 
     struct retention_updated rotate_data;
 
     memset(&rotate_data, 0, sizeof(rotate_data));
 
-    int max_intervals = 8;
+    int max_intervals = 32;
 
     rotate_data.interval_duration_count = 0;
     rotate_data.interval_durations = callocz(max_intervals, sizeof(*rotate_data.interval_durations));
 
     now_realtime_timeval(&rotate_data.rotation_timestamp);
-    rotate_data.memory_mode = localhost->rrd_memory_mode;       // TODO: FIX
+    rotate_data.memory_mode = wc->host->rrd_memory_mode;
     rotate_data.claim_id = claim_id;
     rotate_data.node_id = strdupz(wc->node_id);
 
@@ -590,7 +634,21 @@ void sql_update_metric_statistics(struct aclk_database_worker_config *wc, struct
             rotate_data.interval_durations[rotate_data.interval_duration_count].update_every = update_every;
             start_time = LONG_MAX;
         }
-        rc = rrdeng_metric_latest_time_by_uuid((uuid_t *)sqlite3_column_blob(res, 0), &first_entry_t, &last_entry_t);
+#ifdef ENABLE_DBENGINE
+        time_t  last_entry_t;
+        if (wc->host->rrd_memory_mode == RRD_MEMORY_MODE_DBENGINE)
+            rc = rrdeng_metric_latest_time_by_uuid((uuid_t *)sqlite3_column_blob(res, 0), &first_entry_t, &last_entry_t);
+        else
+#endif
+        {
+            RRDSET *st = NULL;
+            rc = (st = rrdset_find(wc->host, (const char *)sqlite3_column_text(res, 2))) ? 0 : 1;
+            if (!rc) {
+                first_entry_t = rrdset_first_entry_t(st);
+//                info("DEBUG: Scanning SET = %s --> %ld", st->name, first_entry_t);
+            }
+        }
+
         if (likely(!rc && first_entry_t))
             start_time = MIN(start_time, first_entry_t);
     }
@@ -614,9 +672,6 @@ failed:
     rc = sqlite3_finalize(res);
     if (unlikely(rc != SQLITE_OK))
         error_report("Failed to finalize the prepared statement when reading host dimensions");
-#else
-    UNUSED(wc);
-#endif
     return;
 }
 
@@ -649,12 +704,26 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     db_execute(buffer_tostring(sql));
     buffer_flush(sql);
 
-    buffer_sprintf(sql,TRIGGER_ACLK_CHART_PAYLOAD, uuid_str, uuid_str, uuid_str);
+    buffer_sprintf(sql, INDEX_ACLK_CHART, uuid_str, uuid_str);
     db_execute(buffer_tostring(sql));
     buffer_flush(sql);
 
-    buffer_sprintf(sql,TABLE_ACLK_ALERT, uuid_str, uuid_str, uuid_str);
+    buffer_sprintf(sql, INDEX_ACLK_CHART_LATEST, uuid_str, uuid_str);
     db_execute(buffer_tostring(sql));
+    buffer_flush(sql);
+
+    buffer_sprintf(sql, TRIGGER_ACLK_CHART_PAYLOAD, uuid_str, uuid_str, uuid_str);
+    db_execute(buffer_tostring(sql));
+    buffer_flush(sql);
+
+    buffer_sprintf(sql, TABLE_ACLK_ALERT, uuid_str, uuid_str, uuid_str);
+    db_execute(buffer_tostring(sql));
+    buffer_flush(sql);
+
+    buffer_sprintf(sql, INDEX_ACLK_ALERT, uuid_str, uuid_str);
+    db_execute(buffer_tostring(sql));
+    buffer_flush(sql);
+
 
     buffer_free(sql);
     // Spawn db thread for processing (event loop)
@@ -667,8 +736,8 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
     wc->host = host;
     wc->chart_updates = 0;
     wc->alert_updates = 0;
-    wc->cleanup_after = now_realtime_sec() + 600;
     wc->startup_time = now_realtime_sec();
+    wc->cleanup_after = wc->startup_time + ACLK_DATABASE_CLEANUP_FIRST;
     strcpy(wc->uuid_str, uuid_str);
     strcpy(wc->host_guid, host_guid);
     if (node_id && !uuid_is_null(*node_id))
@@ -679,52 +748,212 @@ void sql_create_aclk_table(RRDHOST *host, uuid_t *host_uuid, uuid_t *node_id)
 void sql_maint_aclk_sync_database(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
 {
     UNUSED(cmd);
-    static time_t  last_database_check = 0;
+//    static time_t  last_database_check = 0;
 
-    time_t  now = now_realtime_sec();
-
-    if (unlikely(!last_database_check))
-        goto done;
-
-    if (now - last_database_check < 120)
-        return;
+//    time_t  now = now_realtime_sec();
+//
+//    if (unlikely(!last_database_check))
+//        goto done;
+//
+//    if (now - last_database_check < 120)
+//        return;
 
     info("DEBUG: Checking database for %s", wc->uuid_str);
 
-done:
-    last_database_check = now;
+    //last_database_check = now;
 
+    BUFFER *sql = buffer_create(1024);
+
+    buffer_sprintf(sql,"DELETE FROM aclk_chart_%s WHERE date_submitted IS NOT NULL AND date_updated < strftime('%%s','now','-%d seconds');", wc->uuid_str, ACLK_DELETE_ACK_INTERNAL);
+    db_execute(buffer_tostring(sql));
+    buffer_flush(sql);
+
+    buffer_sprintf(sql,"DELETE FROM aclk_chart_payload_%s WHERE unique_id NOT IN "
+        "(SELECT unique_id FROM aclk_chart_%s) AND unique_id NOT IN (SELECT unique_id FROM aclk_chart_latest_%s);",
+          wc->uuid_str,  wc->uuid_str, wc->uuid_str);
+    db_execute(buffer_tostring(sql));
+
+    buffer_free(sql);
     return;
+}
 
+#define SQL_SELECT_HOST_BY_UUID  "SELECT host_id FROM host WHERE host_id = @host_id;"
+
+static int is_host_available(uuid_t *host_id)
+{
+    sqlite3_stmt *res = NULL;
+    int rc;
+
+    if (unlikely(!db_meta)) {
+        if (default_rrd_memory_mode == RRD_MEMORY_MODE_DBENGINE)
+            error_report("Database has not been initialized");
+        return 1;
+    }
+
+    rc = sqlite3_prepare_v2(db_meta, SQL_SELECT_HOST_BY_UUID, -1, &res, 0);
+    if (unlikely(rc != SQLITE_OK)) {
+        error_report("Failed to prepare statement to select node instance information for a node");
+        return 1;
+    }
+
+    rc = sqlite3_bind_blob(res, 1, host_id, sizeof(*host_id), SQLITE_STATIC);
+    if (unlikely(rc != SQLITE_OK)) {
+        error_report("Failed to bind host_id parameter to select node instance information");
+        goto failed;
+    }
+    rc = sqlite3_step(res);
+
+    failed:
+    if (unlikely(sqlite3_finalize(res) != SQLITE_OK))
+        error_report("Failed to finalize the prepared statement when checking host existence");
+
+    return (rc == SQLITE_ROW);
+}
+
+//void sql_drop_host_aclk_table_list(uuid_t *host_uuid)
+//{
+//    int rc;
+//    char uuid_str[GUID_LEN + 1];
+//
+//    uuid_unparse_lower_fix(host_uuid, uuid_str);
 //
 //    BUFFER *sql = buffer_create(1024);
+//    buffer_sprintf(
+//        sql,"SELECT 'drop '||type||' IF EXISTS '||name||';' FROM sqlite_schema " \
+//        "WHERE name LIKE 'aclk_%%_%s' AND type IN ('table', 'trigger', 'index');", uuid_str);
 //
-//    buffer_sprintf(sql,"SELECT ac.sequence_id, ac.date_created FROM aclk_chart_%s ac " \
-//                        "WHERE ac.date_submitted IS NOT NULL ORDER BY ac.sequence_id DESC LIMIT 1;", wc->uuid_str);
-//
-//    int rc;
 //    sqlite3_stmt *res = NULL;
+//
 //    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
 //    if (rc != SQLITE_OK) {
-//        error_report("Failed to prepare statement to find last chart sequence id");
+//        error_report("Failed to prepare statement to clean up aclk tables");
 //        goto fail;
 //    }
+//    buffer_flush(sql);
 //
-//    wc->chart_sequence_id = 0;
-//    wc->chart_timestamp = 0;
-//    while (sqlite3_step(res) == SQLITE_ROW) {
-//        wc->chart_sequence_id = (uint64_t) sqlite3_column_int64(res, 0);
-//        wc->chart_timestamp  = (time_t) sqlite3_column_int64(res, 1);
-//    }
-//
-//    debug(D_ACLK_SYNC,"Chart %s reports last seq=%"PRIu64" t=%ld", wc->uuid_str,
-//          wc->chart_sequence_id, wc->chart_timestamp);
+//    while (sqlite3_step(res) == SQLITE_ROW)
+//        buffer_strcat(sql, (char *) sqlite3_column_text(res, 0));
 //
 //    rc = sqlite3_finalize(res);
 //    if (unlikely(rc != SQLITE_OK))
-//        error_report("Failed to reset statement when fetching chart sequence info, rc = %d", rc);
+//        error_report("Failed to finalize statement to clean up aclk tables, rc = %d", rc);
+//
+//    db_execute(buffer_tostring(sql));
+//
+//    fail:
+//    buffer_free(sql);
+//}
+
+void sql_delete_aclk_table_list(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
+{
+    UNUSED(wc);
+
+    int rc;
+
+    uuid_t host_id;
+
+    char *host_guid = (char *)cmd.data;
+
+    info("DEBUG: Checking if I should delete aclk tables for node %s", host_guid);
+    rc = uuid_parse(host_guid, host_id);
+    if (rc)
+        goto done;
+
+    if (is_host_available(&host_id)) {
+        info("DEBUG: Host %s exists, cannot delete aclk sync tables", host_guid);
+        goto done;
+    }
+
+    info("DEBUG: Host %s does NOT exist, can delete aclk sync tables", host_guid);
+//    sql_drop_host_aclk_table_list(&host_id);
+
+//    int rc;
+//    char uuid_str[GUID_LEN + 1];
+
+    host_guid[8] = '_';
+    host_guid[13] = '_';
+    host_guid[18] = '_';
+    host_guid[23] = '_';
+//    uuid_unparse_lower_fix(host_uuid, uuid_str);
+
+    sqlite3_stmt *res = NULL;
+    BUFFER *sql = buffer_create(1024);
+
+    buffer_sprintf(sql,"SELECT 'drop '||type||' IF EXISTS '||name||';' FROM sqlite_schema " \
+        "WHERE name LIKE 'aclk_%%_%s' AND type IN ('table', 'trigger', 'index');", host_guid);
+
+    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
+    if (rc != SQLITE_OK) {
+        error_report("Failed to prepare statement to clean up aclk tables");
+        goto fail;
+    }
+    buffer_flush(sql);
+
+    while (sqlite3_step(res) == SQLITE_ROW)
+        buffer_strcat(sql, (char *) sqlite3_column_text(res, 0));
+
+    rc = sqlite3_finalize(res);
+    if (unlikely(rc != SQLITE_OK))
+        error_report("Failed to finalize statement to clean up aclk tables, rc = %d", rc);
+
+    db_execute(buffer_tostring(sql));
+
+fail:
+    buffer_free(sql);
+
+done:
+    freez(host_guid);
+    return;
+}
+
+static int sql_check_aclk_table(void *data, int argc, char **argv, char **column)
+{
+    struct aclk_database_worker_config *wc = data;
+    UNUSED(argc);
+    UNUSED(column);
+
+    info("DEBUG: Scheduling aclk sync table check for node %s", (char *) argv[0]);
+    struct aclk_database_cmd cmd;
+    cmd.opcode = ACLK_DATABASE_DELETE_HOST;
+    cmd.completion = NULL;
+    cmd.data = strdupz((char *) argv[0]);
+    aclk_database_enq_cmd_noblock(wc, &cmd);
+    return 0;
+}
+
+#define SQL_SELECT_ACLK_ACTIVE_LIST "SELECT REPLACE(SUBSTR(name,19),'_','-') FROM sqlite_schema " \
+        "WHERE name LIKE 'aclk_chart_latest_%' AND type IN ('table');"
+
+void sql_check_aclk_table_list(struct aclk_database_worker_config *wc)
+{
+    info("DEBUG: Cleaning tables for nodes that do not exist");
+    (int) sqlite3_exec(db_meta, SQL_SELECT_ACLK_ACTIVE_LIST, sql_check_aclk_table, (void *) wc, NULL);
+    return;
+}
+
+
+//void sql_aclk_drop_all_table_list()
+//{
+//    int rc;
+//
+//    BUFFER *sql = buffer_create(1024);
+//    buffer_strcat(sql, "SELECT host_id FROM host;");
+//    sqlite3_stmt *res = NULL;
+//
+//    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
+//    if (rc != SQLITE_OK) {
+//        error_report("Failed to prepare statement to clean up aclk tables");
+//        goto fail;
+//    }
+//    while (sqlite3_step(res) == SQLITE_ROW) {
+//        sql_drop_host_aclk_table_list((uuid_t *)sqlite3_column_blob(res, 0));
+//    }
+//
+//    rc = sqlite3_finalize(res);
+//    if (unlikely(rc != SQLITE_OK))
+//        error_report("Failed to finalize statement to clean up aclk tables, rc = %d", rc);
 //
 //    fail:
 //    buffer_free(sql);
 //    return;
-}
+//}
