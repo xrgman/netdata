@@ -99,7 +99,7 @@ static inline char *get_str_from_uuid(uuid_t *uuid)
         " do update set unique_id = new.unique_id, update_count = update_count + 1; " \
         "end;"
 
-#define TABLE_ACLK_ALERT "CREATE TABLE IF NOT EXISTS aclk_alert_%s (sequence_id INTEGER PRIMARY KEY AUTOINCREMENT, " \
+#define TABLE_ACLK_ALERT "CREATE TABLE IF NOT EXISTS aclk_alert_%s (sequence_id INTEGER PRIMARY KEY, " \
         "alert_unique_id, date_created, date_submitted, " \
         "unique(alert_unique_id)); " \
         "insert into aclk_alert_%s (alert_unique_id, date_created) " \

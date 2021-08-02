@@ -729,6 +729,7 @@ void aclk_push_alert_event(struct aclk_database_worker_config *wc, struct aclk_d
         destroy_alarm_log_entry(&alarm_log);
         freez(edit_command);
     }
+    buffer_flush(sql);
 
     buffer_sprintf(sql, "UPDATE aclk_alert_%s SET date_submitted=strftime('%%s') "
                         "WHERE date_submitted IS NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64 ";",
