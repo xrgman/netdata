@@ -588,8 +588,6 @@ ACLK_FILES = \
     mqtt_websockets/c-rbuf/src/ringbuffer_internal.h \
     mqtt_websockets/MQTT-C/src/mqtt.c \
     mqtt_websockets/MQTT-C/include/mqtt.h \
-    aclk/schema-wrappers/common.cc \
-    aclk/schema-wrappers/common.h \
     aclk/schema-wrappers/connection.cc \
     aclk/schema-wrappers/connection.h \
     aclk/schema-wrappers/node_connection.cc \
@@ -607,6 +605,8 @@ ACLK_FILES = \
     aclk/schema-wrappers/node_info.cc \
     aclk/schema-wrappers/node_info.h \
     aclk/schema-wrappers/schema_wrappers.h \
+    aclk/schema-wrappers/schema_wrapper_utils.cc \
+    aclk/schema-wrappers/schema_wrapper_utils.h \
     $(NULL)
 
 ACLK_NG_PROTO_BUILT_FILES = aclk/aclk-schemas/proto/agent/v1/connection.pb.cc \

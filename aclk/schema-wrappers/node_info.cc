@@ -2,7 +2,7 @@
 
 #include "proto/nodeinstance/info/v1/info.pb.h"
 
-#include "common.h"
+#include "schema_wrapper_utils.h"
 
 static int generate_node_info(nodeinstance::info::v1::NodeInfo *info, struct aclk_node_info *data)
 {

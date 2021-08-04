@@ -6,7 +6,7 @@
 
 #include "libnetdata/libnetdata.h"
 
-#include "common.h"
+#include "schema_wrapper_utils.h"
 
 struct start_alarm_streaming parse_start_alarm_streaming(const char *data, size_t len)
 {

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "aclk/aclk_util.h" //TODOTODO needed?
+
 #include "proto/chart/v1/stream.pb.h"
 #include "chart_stream.h"
 
-#include "common.h"
+#include "schema_wrapper_utils.h"
 
 #include <sys/time.h>
 #include <stdlib.h>
