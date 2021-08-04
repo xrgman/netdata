@@ -11,7 +11,8 @@
 stream_charts_and_dims_t parse_stream_charts_and_dims(const char *data, size_t len)
 {
     chart::v1::StreamChartsAndDimensions msg;
-    stream_charts_and_dims_t res = { .claim_id = NULL, .node_id = NULL };
+    stream_charts_and_dims_t res;
+    memset(&res, 0, sizeof(res));
 
     if (!msg.ParseFromArray(data, len))
         return res;
@@ -28,7 +29,7 @@ stream_charts_and_dims_t parse_stream_charts_and_dims(const char *data, size_t l
 chart_and_dim_ack_t parse_chart_and_dimensions_ack(const char *data, size_t len)
 {
     chart::v1::ChartsAndDimensionsAck msg;
-    chart_and_dim_ack_t res = { .claim_id = NULL, .node_id = NULL };
+    chart_and_dim_ack_t res = { .claim_id = NULL, .node_id = NULL, .last_seq_id = 0 };
 
     if (!msg.ParseFromArray(data, len))
         return res;
