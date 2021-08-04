@@ -11,7 +11,8 @@
 stream_charts_and_dims_t parse_stream_charts_and_dims(const char *data, size_t len)
 {
     chart::v1::StreamChartsAndDimensions msg;
-    stream_charts_and_dims_t res = { .claim_id = NULL, .node_id = NULL };
+    stream_charts_and_dims_t res;
+    memset(&res, 0, sizeof(res));
 
     if (!msg.ParseFromArray(data, len))
         return res;
@@ -20,8 +21,7 @@ stream_charts_and_dims_t parse_stream_charts_and_dims(const char *data, size_t l
     res.claim_id = strdup(msg.claim_id().c_str());
     res.seq_id = msg.sequence_id();
     res.batch_id = msg.batch_id();
-    res.seq_id_created_at.tv_usec = msg.seq_id_created_at().nanos() / 1000;
-    res.seq_id_created_at.tv_sec = msg.seq_id_created_at().seconds();
+    set_timeval_from_google_timestamp(msg.seq_id_created_at(), &res.seq_id_created_at);
 
     return res;
 }
@@ -29,7 +29,7 @@ stream_charts_and_dims_t parse_stream_charts_and_dims(const char *data, size_t l
 chart_and_dim_ack_t parse_chart_and_dimensions_ack(const char *data, size_t len)
 {
     chart::v1::ChartsAndDimensionsAck msg;
-    chart_and_dim_ack_t res = { .claim_id = NULL, .node_id = NULL };
+    chart_and_dim_ack_t res = { .claim_id = NULL, .node_id = NULL, .last_seq_id = 0 };
 
     if (!msg.ParseFromArray(data, len))
         return res;
@@ -129,8 +129,7 @@ static int set_chart_instance_updated(chart::v1::ChartInstanceUpdated *chart, co
     pos = chart->mutable_position();
     pos->set_sequence_id(update->position.sequence_id);
     pos->set_previous_sequence_id(update->position.previous_sequence_id);
-    pos->mutable_seq_id_created_at()->set_seconds(update->position.seq_id_creation_time.tv_sec);
-    pos->mutable_seq_id_created_at()->set_nanos(update->position.seq_id_creation_time.tv_sec * 1000);
+    set_google_timestamp_from_timeval(update->position.seq_id_creation_time, pos->mutable_seq_id_created_at());
 
     return 0;
 }
@@ -145,19 +144,13 @@ static int set_chart_dim_updated(chart::v1::ChartDimensionUpdated *dim, const st
     dim->set_claim_id(c_dim->claim_id);
     dim->set_name(c_dim->name);
 
-    google::protobuf::Timestamp *tv = dim->mutable_created_at();
-    tv->set_seconds(c_dim->created_at.tv_sec);
-    tv->set_nanos(c_dim->created_at.tv_usec * 1000);
-
-    tv = dim->mutable_last_timestamp();
-    tv->set_seconds(c_dim->last_timestamp.tv_sec);
-    tv->set_nanos(c_dim->last_timestamp.tv_usec * 1000);
+    set_google_timestamp_from_timeval(c_dim->created_at, dim->mutable_created_at());
+    set_google_timestamp_from_timeval(c_dim->last_timestamp, dim->mutable_last_timestamp());
 
     pos = dim->mutable_position();
     pos->set_sequence_id(c_dim->position.sequence_id);
     pos->set_previous_sequence_id(c_dim->position.previous_sequence_id);
-    pos->mutable_seq_id_created_at()->set_seconds(c_dim->position.seq_id_creation_time.tv_sec);
-    pos->mutable_seq_id_created_at()->set_nanos(c_dim->position.seq_id_creation_time.tv_usec * 1000);
+    set_google_timestamp_from_timeval(c_dim->position.seq_id_creation_time, pos->mutable_seq_id_created_at());
 
     return 0;
 }
@@ -183,8 +176,7 @@ char *generate_charts_and_dimensions_updated(size_t *len, char **payloads, size_
             pos = db_dim.mutable_position();
             pos->set_sequence_id(new_positions[i].sequence_id);
             pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
-            pos->mutable_seq_id_created_at()->set_seconds(new_positions[i].seq_id_creation_time.tv_sec);
-            pos->mutable_seq_id_created_at()->set_nanos(new_positions[i].seq_id_creation_time.tv_usec * 1000);
+            set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
             dim = msg.add_dimensions();
             *dim = db_dim;
@@ -197,8 +189,7 @@ char *generate_charts_and_dimensions_updated(size_t *len, char **payloads, size_
             pos = db_chart.mutable_position();
             pos->set_sequence_id(new_positions[i].sequence_id);
             pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
-            pos->mutable_seq_id_created_at()->set_seconds(new_positions[i].seq_id_creation_time.tv_sec);
-            pos->mutable_seq_id_created_at()->set_nanos(new_positions[i].seq_id_creation_time.tv_usec * 1000);
+            set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
             chart = msg.add_charts();
             *chart = db_chart;
@@ -231,8 +222,7 @@ char *generate_charts_updated(size_t *len, char **payloads, size_t *payload_size
         pos = db_msg.mutable_position();
         pos->set_sequence_id(new_positions[i].sequence_id);
         pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
-        pos->mutable_seq_id_created_at()->set_seconds(new_positions[i].seq_id_creation_time.tv_sec);
-        pos->mutable_seq_id_created_at()->set_nanos(new_positions[i].seq_id_creation_time.tv_usec * 1000);
+        set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
         chart = msg.add_charts();
         *chart = db_msg;
@@ -264,8 +254,7 @@ char *generate_chart_dimensions_updated(size_t *len, char **payloads, size_t *pa
         pos = db_msg.mutable_position();
         pos->set_sequence_id(new_positions[i].sequence_id);
         pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
-        pos->mutable_seq_id_created_at()->set_seconds(new_positions[i].seq_id_creation_time.tv_sec);
-        pos->mutable_seq_id_created_at()->set_nanos(new_positions[i].seq_id_creation_time.tv_usec * 1000);
+        set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
         dim = msg.add_dimensions();
         *dim = db_msg;
