@@ -74,7 +74,7 @@ char *generate_update_node_info_message(size_t *len, struct update_node_info *in
     msg.set_machine_guid(info->machine_guid);
     msg.set_child(info->child);
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)malloc(*len);
     if (bin)
         msg.SerializeToArray(bin, *len);

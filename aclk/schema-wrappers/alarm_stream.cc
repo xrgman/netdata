@@ -64,7 +64,7 @@ char *generate_alarm_log_health(size_t *len, struct alarm_log_health *data)
     set_google_timestamp_from_timeval(data->log_entries.first_when, entries->mutable_first_when());
     set_google_timestamp_from_timeval(data->log_entries.last_when, entries->mutable_last_when());
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     if (!msg.SerializeToArray(bin, *len))
         return NULL;
@@ -167,7 +167,7 @@ char *generate_alarm_log_entry(size_t *len, struct alarm_log_entry *data)
 
     le.set_rendered_info(data->rendered_info);
 
-    *len = le.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(le);
     char *bin = (char*)mallocz(*len);
     if (!le.SerializeToArray(bin, *len))
         return NULL;

@@ -2,6 +2,7 @@
 
 #include "../aclk-schemas/proto/nodeinstance/create/v1/creation.pb.h"
 #include "node_creation.h"
+#include "schema_wrapper_utils.h"
 
 #include <stdlib.h>
 
@@ -15,7 +16,7 @@ char *generate_node_instance_creation(size_t *len, const node_instance_creation_
     msg.set_hostname(data->hostname);
     msg.set_hops(data->hops);
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)malloc(*len);
     if (bin)
         msg.SerializeToArray(bin, *len);
