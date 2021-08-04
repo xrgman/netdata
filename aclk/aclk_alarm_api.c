@@ -18,13 +18,10 @@ void aclk_send_alarm_log_health(struct alarm_log_health *log_health)
 
 void aclk_send_alarm_log_entry(struct alarm_log_entry *log_entry)
 {
-    aclk_query_t query = aclk_query_new(ALARM_LOG_ENTRY);
+    size_t payload_size;
+    char *payload = generate_alarm_log_entry(&payload_size, log_entry);
 
-    query->data.bin_payload.payload = generate_alarm_log_entry(&query->data.bin_payload.size, log_entry);
-    query->data.bin_payload.topic = ACLK_TOPICID_ALARM_LOG;
-    query->data.bin_payload.msg_name = "AlarmLogEntry";
-    if (query->data.bin_payload.payload)
-        aclk_queue_query(query);
+    aclk_send_bin_msg(payload, payload_size, ACLK_TOPICID_ALARM_LOG, "AlarmLogEntry");
 }
 
 void aclk_send_provide_alarm_cfg(struct provide_alarm_configuration *cfg)
