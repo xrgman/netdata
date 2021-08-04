@@ -635,6 +635,7 @@ ACLK_NG_PROTO_BUILT_FILES = aclk/aclk-schemas/proto/agent/v1/connection.pb.cc \
 
 BUILT_SOURCES += $(ACLK_NG_PROTO_BUILT_FILES)
 nodist_netdata_SOURCES += $(ACLK_NG_PROTO_BUILT_FILES)
+CLEANFILES += $(ACLK_NG_PROTO_BUILT_FILES)
 
 aclk/aclk-schemas/proto/agent/v1/connection.pb.cc \
 aclk/aclk-schemas/proto/agent/v1/connection.pb.h: aclk/aclk-schemas/proto/agent/v1/connection.proto
