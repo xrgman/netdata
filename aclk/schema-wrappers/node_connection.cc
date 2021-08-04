@@ -2,6 +2,7 @@
 
 #include "proto/nodeinstance/connection/v1/connection.pb.h"
 #include "node_connection.h"
+#include "schema_wrapper_utils.h"
 
 #include <sys/time.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@ char *generate_node_instance_connection(size_t *len, const node_instance_connect
     timestamp->set_seconds(tv.tv_sec);
     timestamp->set_nanos(tv.tv_usec * 1000);
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)malloc(*len);
     if (bin)
         msg.SerializeToArray(bin, *len);

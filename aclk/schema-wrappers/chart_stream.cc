@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "aclk/aclk_util.h" //TODOTODO needed?
+
 #include "proto/chart/v1/stream.pb.h"
 #include "chart_stream.h"
 
-#include "common.h"
+#include "schema_wrapper_utils.h"
 
 #include <sys/time.h>
 #include <stdlib.h>
@@ -61,7 +63,7 @@ char *generate_reset_chart_messages(size_t *len, chart_reset_t reset)
             return NULL;
     }
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)malloc(*len);
     if (bin)
         msg.SerializeToArray(bin, *len);
@@ -159,9 +161,7 @@ char *generate_charts_and_dimensions_updated(size_t *len, char **payloads, size_
 {
     chart::v1::ChartsAndDimensionsUpdated msg;
     chart::v1::ChartInstanceUpdated db_chart;
-    chart::v1::ChartInstanceUpdated *chart;
     chart::v1::ChartDimensionUpdated db_dim;
-    chart::v1::ChartDimensionUpdated *dim;
     aclk_lib::v1::ACLKMessagePosition *pos;
 
     msg.set_batch_id(batch_id);
@@ -178,7 +178,7 @@ char *generate_charts_and_dimensions_updated(size_t *len, char **payloads, size_
             pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
             set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
-            dim = msg.add_dimensions();
+            chart::v1::ChartDimensionUpdated *dim = msg.add_dimensions();
             *dim = db_dim;
         } else {
             if (!db_chart.ParseFromArray(payloads[i], payload_sizes[i])) {
@@ -191,12 +191,12 @@ char *generate_charts_and_dimensions_updated(size_t *len, char **payloads, size_
             pos->set_previous_sequence_id(new_positions[i].previous_sequence_id);
             set_google_timestamp_from_timeval(new_positions[i].seq_id_creation_time, pos->mutable_seq_id_created_at());
 
-            chart = msg.add_charts();
+            chart::v1::ChartInstanceUpdated *chart = msg.add_charts();
             *chart = db_chart;
         }
     }
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     msg.SerializeToArray(bin, *len);
 
@@ -228,7 +228,7 @@ char *generate_charts_updated(size_t *len, char **payloads, size_t *payload_size
         *chart = db_msg;
     }
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     msg.SerializeToArray(bin, *len);
 
@@ -260,7 +260,7 @@ char *generate_chart_dimensions_updated(size_t *len, char **payloads, size_t *pa
         *dim = db_msg;
     }
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     msg.SerializeToArray(bin, *len);
 
@@ -274,7 +274,7 @@ char *generate_chart_instance_updated(size_t *len, const struct chart_instance_u
     if (set_chart_instance_updated(chart, update))
         return NULL;
 
-    *len = chart->ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE_PTR(chart);
     char *bin = (char*)mallocz(*len);
     chart->SerializeToArray(bin, *len);
 
@@ -289,7 +289,7 @@ char *generate_chart_dimension_updated(size_t *len, const struct chart_dimension
     if (set_chart_dim_updated(proto_dim, dim))
         return NULL;
 
-    *len = proto_dim->ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE_PTR(proto_dim);
     char *bin = (char*)mallocz(*len);
     proto_dim->SerializeToArray(bin, *len);
 
@@ -302,7 +302,6 @@ using namespace google::protobuf;
 char *generate_retention_updated(size_t *len, struct retention_updated *data)
 {
     chart::v1::RetentionUpdated msg;
-    Map<uint32, uint32> *map;
 
     msg.set_claim_id(data->claim_id);
     msg.set_node_id(data->node_id);
@@ -331,13 +330,13 @@ char *generate_retention_updated(size_t *len, struct retention_updated *data)
     }
 
     for (int i = 0; i < data->interval_duration_count; i++) {
-        map = msg.mutable_interval_durations();
+        Map<uint32, uint32> *map = msg.mutable_interval_durations();
         map->insert({data->interval_durations[i].update_every, data->interval_durations[i].retention});
     }
 
     set_google_timestamp_from_timeval(data->rotation_timestamp, msg.mutable_rotation_timestamp());
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     msg.SerializeToArray(bin, *len);
 

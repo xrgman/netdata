@@ -2,6 +2,7 @@
 
 #include "../aclk-schemas/proto/agent/v1/connection.pb.h"
 #include "connection.h"
+#include "schema_wrapper_utils.h"
 
 #include <sys/time.h>
 #include <stdlib.h>
@@ -23,7 +24,7 @@ char *generate_update_agent_connection(size_t *len, const update_agent_connectio
     timestamp->set_seconds(tv.tv_sec);
     timestamp->set_nanos(tv.tv_usec * 1000);
 
-    *len = connupd.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(connupd);
     char *msg = (char*)malloc(*len);
     if (msg)
         connupd.SerializeToArray(msg, *len);

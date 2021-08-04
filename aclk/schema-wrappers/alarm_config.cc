@@ -6,6 +6,8 @@
 
 #include "libnetdata/libnetdata.h"
 
+#include "schema_wrapper_utils.h"
+
 using namespace alarmconfig::v1;
 
 void destroy_aclk_alarm_configuration(struct aclk_alarm_configuration *cfg)
@@ -125,7 +127,7 @@ char *generate_provide_alarm_configuration(size_t *len, struct provide_alarm_con
         cfg->set_p_db_lookup_options(data->cfg.p_db_lookup_options);
     cfg->set_p_update_every(data->cfg.p_update_every);
 
-    *len = msg.ByteSizeLong();
+    *len = PROTO_COMPAT_MSG_SIZE(msg);
     char *bin = (char*)mallocz(*len);
     if (!msg.SerializeToArray(bin, *len))
         return NULL;
