@@ -263,10 +263,10 @@ static void timer_cb(uv_timer_t* handle)
     if (wc->cleanup_after && wc->cleanup_after < now_realtime_sec()) {
         cmd.opcode = ACLK_DATABASE_CLEANUP;
         cmd.completion = NULL;
-//        aclk_database_enq_cmd_noblock(wc, &cmd);
+        aclk_database_enq_cmd_noblock(wc, &cmd);
 
-//        cmd.opcode = ACLK_DATABASE_UPD_STATS;
-//        cmd.completion = NULL;
+        cmd.opcode = ACLK_DATABASE_UPD_STATS;
+        cmd.completion = NULL;
         if (!aclk_database_enq_cmd_noblock(wc, &cmd))
             wc->cleanup_after += ACLK_DATABASE_CLEANUP_INTERVAL;
     }
