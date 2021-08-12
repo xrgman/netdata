@@ -15,7 +15,7 @@
 #endif
 #define ACLK_MAX_ALERT_UPDATES  (5)
 #define ACLK_SYNC_RETRY_COUNT   "10"
-#define ACLK_DATABASE_CLEANUP_FIRST  (60)
+#define ACLK_DATABASE_CLEANUP_FIRST  (10)
 #define ACLK_DATABASE_CLEANUP_INTERVAL (3600)
 #define ACLK_DELETE_ACK_INTERNAL (600)        // ACKed messages from cloud can be deleted after (seconds)
 
