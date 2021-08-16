@@ -90,10 +90,45 @@ void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_dat
     node_info.data.services = NULL;   // char **
     node_info.data.service_count = 0;
     node_info.data.machine_guid = strdupz(wc->host_guid);
-    node_info.data.host_labels_head = NULL;     //struct label *host_labels_head;
 
+    struct label_index *labels = &host->labels;
+    netdata_rwlock_wrlock(&labels->labels_rwlock);
+    struct label *label_list = labels->head;
+    struct label *aclk_label = NULL;
+    while (label_list) {
+        aclk_label = add_label_to_list(aclk_label, label_list->key, label_list->value, label_list->label_source);
+        label_list = label_list->next;
+    }
+
+    netdata_rwlock_unlock(&labels->labels_rwlock);
+    node_info.data.host_labels_head = aclk_label;
     rrd_unlock();
+
     aclk_update_node_info(&node_info);
+
+    free_label_list(aclk_label);
+    freez(node_info.node_id);
+    freez(node_info.claim_id);
+    freez(node_info.machine_guid);
+    freez(node_info.data.name);
+    freez(node_info.data.os);
+    freez(node_info.data.os_name);
+    freez(node_info.data.os_version);
+    freez(node_info.data.kernel_name);
+    freez(node_info.data.kernel_version);
+    freez(node_info.data.architecture);
+    freez(node_info.data.cpu_frequency);
+    freez(node_info.data.memory);
+    freez(node_info.data.disk_space);
+    freez(node_info.data.version);
+    freez(node_info.data.release_channel);
+    freez(node_info.data.timezone);
+    freez(node_info.data.virtualization_type);
+    freez(node_info.data.container_type);
+    freez(node_info.data.custom_info);
+    //freez(node_info.data.services) // char **
+    freez(node_info.data.machine_guid);
+
     return;
 }
 
