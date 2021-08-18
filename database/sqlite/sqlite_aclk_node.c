@@ -125,7 +125,7 @@ void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_dat
     freez(node_info.data.timezone);
     freez(node_info.data.virtualization_type);
     freez(node_info.data.container_type);
-    freez(node_info.data.custom_info);
+//    freez(node_info.data.custom_info);
     //freez(node_info.data.services) // char **
     freez(node_info.data.machine_guid);
 
