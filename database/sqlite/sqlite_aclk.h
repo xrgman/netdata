@@ -155,7 +155,7 @@ struct aclk_database_cmd {
     struct aclk_completion *completion;
 };
 
-#define ACLK_DATABASE_CMD_Q_MAX_SIZE (2048)
+#define ACLK_DATABASE_CMD_Q_MAX_SIZE (4096)
 
 struct aclk_database_cmdqueue {
     unsigned head, tail;
@@ -187,6 +187,7 @@ struct aclk_database_worker_config {
     int chart_updates;
     int alert_updates;
     time_t batch_created;
+    int node_info_send;
     struct aclk_database_worker_config  *next;
 //    RRDSET *chart_add;      // Chart events added
 //    RRDSET *chart_snd;      // Chart events sent

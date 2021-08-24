@@ -138,9 +138,7 @@ void aclk_database_enq_cmd(struct aclk_database_worker_config *wc, struct aclk_d
     /* wait for free space in queue */
     uv_mutex_lock(&wc->cmd_mutex);
     while ((queue_size = wc->queue_size) == ACLK_DATABASE_CMD_Q_MAX_SIZE) {
-        info("DEBUG: Blocking for more space on %s when adding message %d", wc->uuid_str, cmd->opcode);
         uv_cond_wait(&wc->cmd_cond, &wc->cmd_mutex);
-        info("DEBUG: UnBlocking on %s, adding message %d", wc->uuid_str, cmd->opcode);
     }
     fatal_assert(queue_size < ACLK_DATABASE_CMD_Q_MAX_SIZE);
     /* enqueue command */
@@ -351,9 +349,10 @@ void aclk_database_worker(void *arg)
     wc->error = 0;
     shutdown = 0;
 
+    wc->node_info_send = (wc->host && !localhost);
     aclk_add_worker_thread(wc);
 
-    info("Starting ACLK sync event loop for host with GUID %s (Host is '%s') -- locahost = %s", wc->host_guid, wc->host ? "connected" : "not connected", localhost? "true" : "false");
+    info("Starting ACLK sync thread for host %s -- scratch area %lu bytes", wc->host_guid, sizeof(*wc));
     sql_get_last_chart_sequence(wc, cmd);
     while (likely(shutdown == 0)) {
         uv_run(loop, UV_RUN_DEFAULT);
@@ -459,17 +458,24 @@ void aclk_database_worker(void *arg)
                                 uv_thread_set_name_np(wc->thread, threadname);
                                 wc->host->dbsync_worker = wc;
                                 aclk_del_worker_thread(wc);
-                                if (wc->host->node_id) {
-                                    cmd.opcode = ACLK_DATABASE_NODE_INFO;
-                                    cmd.completion = NULL;
-                                    aclk_database_enq_cmd(wc, &cmd);
-                                }
+                                wc->node_info_send = 1;
+//                                if (wc->host->node_id) {
+//                                    cmd.opcode = ACLK_DATABASE_NODE_INFO;
+//                                    cmd.completion = NULL;
+//                                    aclk_database_enq_cmd(wc, &cmd);
+//                                }
                                 //cmd.opcode = ACLK_DATABASE_UPD_STATS;
                                 //cmd.completion = NULL;
                                 //aclk_database_enq_cmd(wc, &cmd);
                             }
                             //freez(agent_id);
                         }
+                    }
+                    if (wc->node_info_send && wc->host && localhost && claimed()) {
+                        cmd.opcode = ACLK_DATABASE_NODE_INFO;
+                        cmd.completion = NULL;
+                        info("DEBUG: Sending node info for %s", wc->host_guid);
+                        wc->node_info_send = aclk_database_enq_cmd_noblock(wc, &cmd);
                     }
                     break;
                 case ACLK_DATABASE_DEDUP_CHART:
