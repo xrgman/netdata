@@ -138,7 +138,9 @@ void aclk_database_enq_cmd(struct aclk_database_worker_config *wc, struct aclk_d
     /* wait for free space in queue */
     uv_mutex_lock(&wc->cmd_mutex);
     while ((queue_size = wc->queue_size) == ACLK_DATABASE_CMD_Q_MAX_SIZE) {
+        info("DEBUG: Blocking for more space on %s when adding message %d", wc->uuid_str, cmd->opcode);
         uv_cond_wait(&wc->cmd_cond, &wc->cmd_mutex);
+        info("DEBUG: UnBlocking on %s, adding message %d", wc->uuid_str, cmd->opcode);
     }
     fatal_assert(queue_size < ACLK_DATABASE_CMD_Q_MAX_SIZE);
     /* enqueue command */
