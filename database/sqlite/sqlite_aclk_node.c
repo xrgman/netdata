@@ -61,7 +61,7 @@ void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_dat
 
     struct update_node_info node_info;
 
-    rrd_wrlock();
+    rrdhost_rdlock(wc->host);
     node_info.node_id = get_str_from_uuid(wc->host->node_id);
     node_info.claim_id = is_agent_claimed();
     node_info.machine_guid = strdupz(wc->host_guid);
@@ -102,7 +102,7 @@ void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_dat
 
     netdata_rwlock_unlock(&labels->labels_rwlock);
     node_info.data.host_labels_head = aclk_label;
-    rrd_unlock();
+    rrdhost_unlock(wc->host);
 
     aclk_update_node_info(&node_info);
 
