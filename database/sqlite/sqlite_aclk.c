@@ -288,6 +288,9 @@ static void timer_cb(uv_timer_t* handle)
         cmd.completion = NULL;
         aclk_database_enq_cmd_noblock(wc, &cmd);
     }
+    if (wc->wakeup_counter % 10 == 0)
+        info("DEBUG: Queue %s = %u", wc->host_guid, wc->queue_size);
+    wc->wakeup_counter++;
 }
 
 #define MAX_CMD_BATCH_SIZE (256)

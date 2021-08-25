@@ -105,6 +105,7 @@ void sql_build_node_info(struct aclk_database_worker_config *wc, struct aclk_dat
     rrdhost_unlock(wc->host);
 
     aclk_update_node_info(&node_info);
+    info("DEBUG: Sent node info for %s", wc->host_guid);
 
     free_label_list(aclk_label);
     freez(node_info.node_id);
