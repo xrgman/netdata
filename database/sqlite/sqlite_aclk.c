@@ -471,7 +471,7 @@ void aclk_database_worker(void *arg)
                             //freez(agent_id);
                         }
                     }
-                    if (wc->node_info_send && wc->host && localhost && claimed()) {
+                    if (wc->node_info_send && wc->host && claimed() && wc->host->node_id && localhost) {
                         cmd.opcode = ACLK_DATABASE_NODE_INFO;
                         cmd.completion = NULL;
                         info("DEBUG: Sending node info for %s", wc->host_guid);
