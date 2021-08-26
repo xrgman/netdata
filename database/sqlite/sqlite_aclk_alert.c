@@ -1042,6 +1042,14 @@ void sql_queue_removed_alerts_to_aclk(RRDHOST *host)
         return;
     }
 
+    //check if wc is active or not. better way to do it?
+    //this gets called from the health thread
+    //should check if we're claimed, table exists, etc...
+    struct aclk_database_worker_config *wc = (struct aclk_database_worker_config *) host->dbsync_worker;
+    if (unlikely(!wc)) {
+        return;
+    }
+
     char uuid_str[GUID_LEN + 1];
     uuid_unparse_lower(host->host_uuid, uuid_str);
     uuid_str[8] = '_';
