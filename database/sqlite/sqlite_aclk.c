@@ -366,12 +366,14 @@ void aclk_database_worker(void *arg)
         /* wait for commands */
         cmd_batch_size = 0;
         do {
-            if (unlikely(cmd_batch_size >= MAX_CMD_BATCH_SIZE))
+            if (unlikely(cmd_batch_size >= MAX_CMD_BATCH_SIZE)) {
+                info("DEBUG: %s Processed %u commands, current queue about %u", wc->uuid_str, cmd_batch_size, wc->queue_size);
                 break;
+            }
             cmd = aclk_database_deq_cmd(wc);
             opcode = cmd.opcode;
             ++cmd_batch_size;
-            db_lock();
+//            db_lock();
             switch (opcode) {
                 case ACLK_DATABASE_NOOP:
                     /* the command queue was empty, do nothing */
@@ -501,7 +503,7 @@ void aclk_database_worker(void *arg)
                     debug(D_ACLK_SYNC, "%s: default.", __func__);
                     break;
             }
-            db_unlock();
+//            db_unlock();
             if (cmd.completion)
                 aclk_complete(cmd.completion);
         } while (opcode != ACLK_DATABASE_NOOP);
