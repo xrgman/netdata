@@ -367,7 +367,7 @@ void aclk_database_worker(void *arg)
         cmd_batch_size = 0;
         do {
             if (unlikely(cmd_batch_size >= MAX_CMD_BATCH_SIZE)) {
-                info("DEBUG: Processed %u commands, current queue about %u", cmd_batch_size, wc->queue_size);
+                info("DEBUG: %s Processed %u commands, current queue about %u", wc->uuid_str, cmd_batch_size, wc->queue_size);
                 break;
             }
             cmd = aclk_database_deq_cmd(wc);
