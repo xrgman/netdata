@@ -925,6 +925,7 @@ void sql_chart_deduplicate(struct aclk_database_worker_config *wc, struct aclk_d
     buffer_flush(sql);
     buffer_sprintf(sql, "DROP TABLE IF EXISTS t_%s;", wc->uuid_str);
     db_execute(buffer_tostring(sql));
+    db_unlock();
 
     sql_get_last_chart_sequence(wc, cmd);
 
