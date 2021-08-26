@@ -14,22 +14,36 @@
 
 int payload_sent(char *uuid_str, uuid_t *uuid, void *payload, size_t payload_size)
 {
-    sqlite3_stmt *res = NULL;
+    //sqlite3_stmt *res = NULL;
+    static __thread sqlite3_stmt *res = NULL;
     int rc;
-    int payload_sent = 0;
+    int send_status = 0;
 
-    BUFFER *sql = buffer_create(1024);
-
-    buffer_sprintf(sql,"SELECT 1 FROM aclk_chart_latest_%s acl, aclk_chart_payload_%s acp "
-                       "WHERE acl.unique_id = acp.unique_id AND acl.uuid = @uuid AND acp.payload = @payload;",
-                        uuid_str, uuid_str);
-
-    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
-    if (unlikely(rc != SQLITE_OK)) {
-        error_report("Failed to prepare statement to check payload data");
+    if (unlikely(!res)) {
+        BUFFER *sql = buffer_create(1024);
+        buffer_sprintf(sql,"SELECT 1 FROM aclk_chart_latest_%s acl, aclk_chart_payload_%s acp "
+                            "WHERE acl.unique_id = acp.unique_id AND acl.uuid = @uuid AND acp.payload = @payload;",
+                       uuid_str, uuid_str);
+        rc = prepare_statement(db_meta, (char *) buffer_tostring(sql), &res);
         buffer_free(sql);
-        return 0;
+        if (rc != SQLITE_OK) {
+            error_report("Failed to prepare statement to check payload data");
+            return 0;
+        }
     }
+
+//    BUFFER *sql = buffer_create(1024);
+//
+//    buffer_sprintf(sql,"SELECT 1 FROM aclk_chart_latest_%s acl, aclk_chart_payload_%s acp "
+//                       "WHERE acl.unique_id = acp.unique_id AND acl.uuid = @uuid AND acp.payload = @payload;",
+//                        uuid_str, uuid_str);
+//
+//    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res, 0);
+//    if (unlikely(rc != SQLITE_OK)) {
+//        error_report("Failed to prepare statement to check payload data");
+//        buffer_free(sql);
+//        return 0;
+//    }
 
     rc = sqlite3_bind_blob(res, 1, uuid , sizeof(*uuid), SQLITE_STATIC);
     if (unlikely(rc != SQLITE_OK))
@@ -40,41 +54,55 @@ int payload_sent(char *uuid_str, uuid_t *uuid, void *payload, size_t payload_siz
         goto bind_fail;
 
     while (sqlite3_step(res) == SQLITE_ROW) {
-        payload_sent = sqlite3_column_int(res, 0);
+        send_status = sqlite3_column_int(res, 0);
     }
 
 bind_fail:
-    if (unlikely(sqlite3_finalize(res) != SQLITE_OK))
+    if (unlikely(sqlite3_reset(res) != SQLITE_OK))
         error_report("Failed to reset statement in check payload, rc = %d", rc);
-    buffer_free(sql);
-    return payload_sent;
+//    buffer_free(sql);
+    return send_status;
 }
 
 int aclk_add_chart_payload(char *uuid_str, uuid_t *uuid, char *claim_id, ACLK_PAYLOAD_TYPE payload_type, void *payload, size_t payload_size)
 {
-    sqlite3_stmt *res_chart = NULL;
+    //sqlite3_stmt *res_chart = NULL;
+    static __thread sqlite3_stmt *res_chart = NULL;
     int rc;
 
     rc = payload_sent(uuid_str, uuid, payload, payload_size);
-    char uuid_str1[GUID_LEN + 1];
-    uuid_unparse_lower(*uuid, uuid_str1);
+//    char uuid_str1[GUID_LEN + 1];
+//    uuid_unparse_lower(*uuid, uuid_str1);
 
     //if (payload_type > 0)
     //    info("DEBUG: Checking %s if payload already sent (%s), RC = %d (payload type = %d)", uuid_str, uuid_str1, rc, payload_type);
     if (rc == 1)
         return 0;
 
-    BUFFER *sql = buffer_create(1024);
+    if (unlikely(!res_chart)) {
+        BUFFER *sql = buffer_create(1024);
 
-    buffer_sprintf(sql,"INSERT INTO aclk_chart_payload_%s (unique_id, uuid, claim_id, date_created, type, payload) " \
-                 "VALUES (@unique_id, @uuid, @claim_id, strftime('%%s','now'), @type, @payload);", uuid_str);
+        buffer_sprintf(sql,"INSERT INTO aclk_chart_payload_%s (unique_id, uuid, claim_id, date_created, type, payload) " \
+                            "VALUES (@unique_id, @uuid, @claim_id, strftime('%%s','now'), @type, @payload);", uuid_str);
 
-    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res_chart, 0);
-    if (unlikely(rc != SQLITE_OK)) {
-        error_report("Failed to prepare statement to store chart payload data");
+        rc = prepare_statement(db_meta, (char *) buffer_tostring(sql), &res_chart);
         buffer_free(sql);
-        return 1;
+
+        if (rc != SQLITE_OK) {
+            error_report("Failed to prepare statement to store chart payload data");
+            return 1;
+        }
     }
+
+//    buffer_sprintf(sql,"INSERT INTO aclk_chart_payload_%s (unique_id, uuid, claim_id, date_created, type, payload) " \
+//                 "VALUES (@unique_id, @uuid, @claim_id, strftime('%%s','now'), @type, @payload);", uuid_str);
+//
+//    rc = sqlite3_prepare_v2(db_meta, buffer_tostring(sql), -1, &res_chart, 0);
+//    if (unlikely(rc != SQLITE_OK)) {
+//        error_report("Failed to prepare statement to store chart payload data");
+//        buffer_free(sql);
+//        return 1;
+//    }
 
     uuid_t unique_uuid;
     uuid_generate(unique_uuid);
@@ -106,10 +134,10 @@ int aclk_add_chart_payload(char *uuid_str, uuid_t *uuid, char *claim_id, ACLK_PA
     if (unlikely(rc != SQLITE_DONE))
         error_report("Failed store chart payload event, rc = %d", rc);
 
-    bind_fail:
-    if (unlikely(sqlite3_finalize(res_chart) != SQLITE_OK))
+bind_fail:
+    if (unlikely(sqlite3_reset(res_chart) != SQLITE_OK))
         error_report("Failed to reset statement in store chart payload, rc = %d", rc);
-    buffer_free(sql);
+//    buffer_free(sql);
     return (rc != SQLITE_DONE);
 }
 
@@ -463,6 +491,8 @@ void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_d
 
         if (likely(first_sequence)) {
             buffer_flush(sql);
+
+            db_lock();
             buffer_sprintf(sql, "UPDATE aclk_chart_%s SET status = NULL, date_submitted=strftime('%%s','now') "
                             "WHERE date_submitted IS NULL AND sequence_id BETWEEN %" PRIu64 " AND %" PRIu64 ";",
                        wc->uuid_str, first_sequence, last_sequence);
@@ -475,6 +505,7 @@ void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_d
                                 " ;",
                            wc->uuid_str, wc->uuid_str, first_sequence, last_sequence);
             db_execute(buffer_tostring(sql));
+            db_unlock();
 
             info("DEBUG: %s Loop %d chart seq %" PRIu64 " - %" PRIu64", t=%ld batch=%"PRIu64, wc->uuid_str,
                  loop, first_sequence, last_sequence, last_timestamp, wc->batch_id);
@@ -853,6 +884,7 @@ void sql_chart_deduplicate(struct aclk_database_worker_config *wc, struct aclk_d
 
     BUFFER *sql = buffer_create(1024);
 
+    db_lock();
     buffer_sprintf(sql, "DROP TABLE IF EXISTS t_%s;", wc->uuid_str);
     db_execute(buffer_tostring(sql));
 
