@@ -371,6 +371,8 @@ void aclk_database_worker(void *arg)
             opcode = cmd.opcode;
             ++cmd_batch_size;
 //            db_lock();
+            snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS%d_%s", opcode, wc->uuid_str);
+            uv_thread_set_name_np(wc->thread, threadname);
             switch (opcode) {
                 case ACLK_DATABASE_NOOP:
                     /* the command queue was empty, do nothing */
