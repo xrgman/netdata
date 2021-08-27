@@ -282,12 +282,12 @@ static void timer_cb(uv_timer_t* handle)
         aclk_database_enq_cmd_noblock(wc, &cmd);
     }
 
-    if (wc->alert_updates) {
-        cmd.opcode = ACLK_DATABASE_PUSH_ALERT;
-        cmd.count = ACLK_MAX_ALERT_UPDATES;
-        cmd.completion = NULL;
-        aclk_database_enq_cmd_noblock(wc, &cmd);
-    }
+//    if (wc->alert_updates) {
+//        cmd.opcode = ACLK_DATABASE_PUSH_ALERT;
+//        cmd.count = ACLK_MAX_ALERT_UPDATES;
+//        cmd.completion = NULL;
+//        aclk_database_enq_cmd_noblock(wc, &cmd);
+//    }
 }
 
 #define MAX_CMD_BATCH_SIZE (256)
