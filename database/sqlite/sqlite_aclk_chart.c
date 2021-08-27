@@ -303,7 +303,7 @@ void sql_reset_chart_event(struct aclk_database_worker_config *wc, struct aclk_d
                    wc->uuid_str, cmd.param1);
     db_execute(buffer_tostring(sql));
     buffer_free(sql);
-    sql_chart_deduplicate(wc, cmd);
+    //sql_chart_deduplicate(wc, cmd);
     sql_get_last_chart_sequence(wc, cmd);
     // Start sending updates
     wc->chart_updates = 1;

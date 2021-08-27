@@ -188,7 +188,6 @@ struct aclk_database_worker_config {
     int alert_updates;
     time_t batch_created;
     int node_info_send;
-    int wakeup_counter;
     struct aclk_database_worker_config  *next;
 //    RRDSET *chart_add;      // Chart events added
 //    RRDSET *chart_snd;      // Chart events sent

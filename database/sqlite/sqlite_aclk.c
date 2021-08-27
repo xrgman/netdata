@@ -288,9 +288,6 @@ static void timer_cb(uv_timer_t* handle)
         cmd.completion = NULL;
         aclk_database_enq_cmd_noblock(wc, &cmd);
     }
-    if (wc->wakeup_counter % 10 == 0)
-        info("DEBUG: Queue %s = %u", wc->host_guid, wc->queue_size);
-    wc->wakeup_counter++;
 }
 
 #define MAX_CMD_BATCH_SIZE (256)
@@ -459,7 +456,7 @@ void aclk_database_worker(void *arg)
                             if (wc->host) {
                                 info("HOST %s detected as active and claimed !!!", wc->host->hostname);
                                 //char threadname[NETDATA_THREAD_NAME_MAX+1];
-                                snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS_%s", wc->host->hostname);
+                                snprintfz(threadname, NETDATA_THREAD_NAME_MAX, "AS_%s", wc->uuid_str);
                                 uv_thread_set_name_np(wc->thread, threadname);
                                 wc->host->dbsync_worker = wc;
                                 aclk_del_worker_thread(wc);
