@@ -248,6 +248,7 @@ int aclk_add_dimension_event(struct aclk_database_worker_config *wc, struct aclk
         freez(claim_id);
         //chart_instance_updated_destroy(&dim_payload);
     }
+    rrddim_flag_clear(rd, RRDDIM_FLAG_ACLK);
 #else
     UNUSED(wc);
     UNUSED(cmd);
@@ -409,8 +410,11 @@ int sql_queue_chart_to_aclk(RRDSET *st)
 
 int sql_queue_dimension_to_aclk(RRDDIM *rd)
 {
-    return sql_queue_chart_payload((struct aclk_database_worker_config *) rd->rrdset->rrdhost->dbsync_worker,
+    int rc = sql_queue_chart_payload((struct aclk_database_worker_config *) rd->rrdset->rrdhost->dbsync_worker,
                                    rd, ACLK_DATABASE_ADD_DIMENSION);
+    if (likely(!rc))
+        rrddim_flag_set(rd, RRDDIM_FLAG_ACLK);
+    return rc;
 }
 
 void aclk_push_chart_event(struct aclk_database_worker_config *wc, struct aclk_database_cmd cmd)
