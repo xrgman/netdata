@@ -22,9 +22,8 @@ bash <(curl -Ss https://my-netdata.io/kickstart-static64.sh)
 
 > This script installs Netdata at `/opt/netdata`.
 
-> See our [installation guide](/packaging/installer/README.md) for details about [automatic
-> updates](/packaging/installer/README.md#automatic-updates) or [nightly vs. stable
-> releases](/packaging/installer/README.md#nightly-vs-stable-releases).
+> See our [installation guide](/packaging/installer/README.md) for details about [automatic updates](/packaging/installer/README.md#automatic-updates) or
+> [nightly vs. stable releases](/packaging/installer/README.md#nightly-vs-stable-releases).
 
 ## What does `kickstart-static64.sh` do?
 
