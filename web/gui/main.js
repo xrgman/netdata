@@ -3507,6 +3507,7 @@ function saveSnapshotModalSetup() {
 };
 
 function saveSnapshotModalLog(priority, msg) {
+    console.log('test');
     document.getElementById('saveSnapshotStatus').className = "alert alert-" + priority;
     document.getElementById('saveSnapshotStatus').innerHTML = msg;
 }
